@@ -488,7 +488,7 @@ table.feedback td.cleft{
     padding: 1em !important;
 }
 table.grading-details th, table.personal-deadline-details th,
-table.grading-details td, table.personal-deadline-details, td {
+table.grading-details td, table.personal-deadline-details td {
     border-bottom: 1px solid #fff;
     padding: .5em;
 }
