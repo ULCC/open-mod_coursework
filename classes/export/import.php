@@ -316,6 +316,7 @@ class import extends grading_sheet{
         $add_grade->lasteditedbyuser  =   $USER->id;
         $add_grade->markernumber      =   $markernumber;
         $add_grade->stage_identifier  =   $stage_identifier;
+        $add_grade->finalised         =   1;
 
         $feedbackid = $DB->insert_record('coursework_feedbacks', $add_grade, true);
 
@@ -367,6 +368,7 @@ class import extends grading_sheet{
             $edit_grade->grade = $grade;
             $edit_grade->feedbackcomment = $feedback;
             $edit_grade->lasteditedbyuser = $USER->id;
+            $edit_grade->finalised = 1;
 
              $update = $DB->update_record('coursework_feedbacks', $edit_grade);
 

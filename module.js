@@ -27,11 +27,11 @@ M.mod_coursework = {
     /**
      * This is to set up the listeners etc for the page elements on the allocations page.
      */
-    init_allocate_page : function () {
+    init_allocate_page : function (e,wwwroot,coursemoduleid) {
         "use strict";
 
 
-        // Make the changes to the moderation set dropdowns set the 'in moderation set'
+        // Make the changes to the moderations set dropdowns set the 'in moderations set'
         // checkboxes automatically.
         $('.assessor_id_dropdown').change(function() {
 
@@ -95,6 +95,23 @@ M.mod_coursework = {
                     $("#same_assessor" ).remove();
                 }
             }
+        });
+
+
+        $('.sampling_set_checkbox').each(function() {
+
+            var $checkbox = $(this);
+
+            var $assessddname  =   $checkbox.attr('id').replace('_samplecheckbox','');
+
+            var $assessdd    =   $('#'+$assessddname);
+
+            if ($checkbox.is(":checked")) {
+                $assessdd.prop("disabled", false)
+            } else {
+                $assessdd.prop("disabled", true);
+            }
+
         });
 
         // default select
@@ -225,6 +242,233 @@ M.mod_coursework = {
 
 
 
+        if (!$('.pin_1')){
+            $(this).hide();
+        }
+
+        $('#selectall_1').change(function() {
+
+            if($(this).is(":checked")) {
+                $('.pin_1').prop('checked',true);
+
+            } else {
+                $('.pin_1').prop('checked',false);
+
+            }
+        })
+
+        $('#selectall_2').change(function() {
+
+            if($(this).is(":checked")) {
+                $('.pin_2').prop('checked',true);
+
+            } else {
+                $('.pin_2').prop('checked',false);
+
+            }
+        })
+
+        $('#selectall_3').change(function() {
+
+            if($(this).is(":checked")) {
+                $('.pin_3').prop('checked',true);
+
+            } else {
+                $('.pin_3').prop('checked',false);
+
+            }
+        })
+
+        $('#selectall_mod').change(function() {
+
+            if($(this).is(":checked")) {
+                $('.pin_r').prop('checked',true);
+
+            } else {
+                $('.pin_r').prop('checked',false);
+            }
+        })
+
+        $('.page-link').each(function (obj,e) {
+
+            $(this).click(function(e,element)  {
+
+               e.preventDefault();
+
+               var linkHref =    $(this).attr("href");
+
+
+               //split the url only look at the query params
+               var params   =   linkHref.split("?");
+
+               //split the params into individual params
+               var i    =   params[1].split("&");
+
+               //get the course module id
+               var b    =   i[0].split("=");
+
+               var coursemoduleid   =   b[1];
+
+               var assesorDropNames =   [];
+                var assesorDropValues =   [];
+
+                var pinnedNames =   [];
+                var pinnedValues =   [];
+
+                var modDropNames =   [];
+                var modDropValues =   [];
+
+                var sampleNames =   [];
+                var sampleValues =   [];
+
+                $('.assessor_id_dropdown').each(function(ae,dropele)  {
+                    assesorDropNames.push($(dropele).attr('name'));
+                    assesorDropValues.push($(dropele).val());
+
+                })
+
+                $('.pinned').each(function(ae,chkele)  {
+
+                    pinnedNames.push($(chkele).attr('name'));
+                    if($(chkele).is(':checked')) {
+                        pinnedValues.push(1);
+                    } else {
+                        pinnedValues.push(0);
+                    }
+
+                })
+
+                $('.moderator_id_dropdown').each(function(ae,dropele)  {
+                    modDropNames.push($(dropele).attr('name'));
+                    modDropValues.push($(dropele).val());
+                })
+
+                $('.sampling_set_checkbox').each(function(ae,chkele)  {
+                    sampleNames.push($(chkele).attr('name'));
+                    if($(chkele).is(':checked')) {
+                        sampleValues.push(1);
+                    } else {
+                        sampleValues.push(0);
+                    }
+                })
+
+
+                $.post( wwwroot+"/mod/coursework/actions/allocationsession.php",
+                    {   'assesorselect[]': assesorDropNames,
+                        'assesorselectvalue[]': assesorDropValues,
+                        'moderatorselect[]': modDropNames,
+                        'moderatorselectvalue[]': modDropValues,
+                        'pinned[]' : pinnedNames,
+                        'pinnedvalue[]' : pinnedValues,
+                        'sample[]' : sampleNames,
+                        'samplevalue[]' : sampleValues,
+
+                        'coursemoduleid' : coursemoduleid } )
+                    .done(function() {
+                        window.location =   linkHref;
+                    });
+
+
+
+                return false;
+            });
+        });
+
+
+        $('#save_assessor_allocation_strategy').click( function (e)  {
+
+            e.preventDefault();
+            console.log('reallocating allocatables');
+
+            var customElement   = $("<div>", {
+                id      : "countdown",
+                css     : {
+                    "font-size" : "15px",
+                    "display" : "block",
+                    "padding-top": "90px"
+                },
+                text    : 'The allocation strategy is being applied this may take some time please wait'
+            });
+
+            $("#coursework_input_buttons").first().LoadingOverlay("show",{
+                custom  :   customElement
+            });
+            var allocationformdata  =   $('#allocation_form').serialize();
+            allocationformdata      =   allocationformdata+"&coursemoduleid="+coursemoduleid;
+            $.ajax({
+                url: wwwroot+"/mod/coursework/actions/processallocation.php",
+                data:allocationformdata,
+                method: 'POST',
+                xhrFields: {
+                    onprogress: function(e) {
+
+                    }
+                },
+                success: function(text) {
+                    $(".allocation-strategy").first().LoadingOverlay("hide");
+
+                    location.reload(true);
+                }
+            });
+
+
+
+
+
+        });
+
+        $('#save_and_exit_assessor_allocation_strategy').click( function (e)  {
+
+            e.preventDefault();
+
+            var customElement   = $("<div>", {
+                id      : "countdown",
+                css     : {
+                    "font-size" : "15px",
+                    "display" : "block",
+                    "padding-top": "90px"
+                },
+                text    : 'The allocation strategy is being saved the page will exit shortly. Depending on the number of participants on this course you may not see the results of the allocations straight away in this event refresh the page'
+            });
+
+            $("#coursework_input_buttons").first().LoadingOverlay("show",{
+                custom  :   customElement
+            });
+
+            var allocationformdata  =   $('#allocation_form').serialize();
+            allocationformdata      =   allocationformdata+"&coursemoduleid="+coursemoduleid;
+            $.ajax({
+                url: wwwroot+"/mod/coursework/actions/processallocation.php",
+                data:allocationformdata,
+                method: 'POST',
+                xhrFields: {
+                    onprogress: function(e) {
+
+
+                    }
+                },
+                success: function(text) {
+
+                }
+            });
+
+            /*  a 5 second delay has been placed before the window location is changed as exiting a page after ajax call
+            *  can sometime lead to the call to the page being aborted. 5 seconds should be enought to allow the page call to occur*/
+
+            setTimeout(function () {
+                window.location     =   wwwroot+"/mod/coursework/view.php?id="+coursemoduleid;
+                },5000);
+
+
+
+
+
+
+
+
+        });
+
+
 
 
     },
@@ -247,7 +491,9 @@ M.mod_coursework = {
 
             }
 
-        })
+        });
+
+
 
 
         $('#selected_dates').click( function () {
@@ -270,6 +516,8 @@ M.mod_coursework = {
 
 
         });
+
+
 
 
 

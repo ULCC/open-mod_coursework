@@ -34,5 +34,23 @@ $tasks = array(
         'day' => '*',
         'month' => '*',
         'dayofweek' => '*'
+    ),
+    array(
+        'classname' => 'mod_coursework\task\enrol_task',
+        'blocking' => 0,
+        'minute' => '0',
+        'hour' => '0',
+        'day' => '*',
+        'month' => '*',
+        'dayofweek' => '*'
+    ),
+    array(
+        'classname' => 'mod_coursework\task\unenrol_task',
+        'blocking' => 0,
+        'minute' => '0',
+        'hour' => '0',
+        'day' => '*',
+        'month' => '*',
+        'dayofweek' => '*'
     )
 );

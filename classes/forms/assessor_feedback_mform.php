@@ -113,7 +113,30 @@ class assessor_feedback_mform extends moodleform {
                                  null,
                                  $file_manager_options);
 
-        $this->add_action_buttons();
+
+        $this->add_submit_buttons($coursework->draft_feedback_enabled());
+
+    }
+
+    /**
+     * @param $draftenabled
+     */
+    public function add_submit_buttons($draftenabled){
+
+        $button_array = array();
+
+        if ($draftenabled) {
+            $button_array[] = $this->_form->createElement('submit', 'submitfeedbackbutton', get_string('saveasdraft', 'coursework'));
+        }
+
+
+            $button_array[] =
+                $this->_form->createElement('submit', 'submitbutton', get_string('saveandfinalise', 'coursework'));
+
+        $button_array[] = $this->_form->createElement('cancel');
+        $this->_form->addGroup($button_array, 'buttonar', '', array(' '), false);
+        $this->_form->closeHeaderBefore('buttonar');
+
     }
 
     /**

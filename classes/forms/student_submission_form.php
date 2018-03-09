@@ -314,7 +314,7 @@ class student_submission_form extends moodleform {
         }
         if ($ability->can('finalise', $this->get_submission())) {
             $button_array[] =
-                $this->_form->createElement('submit', 'finalisebutton', get_string('saveandfinalise', 'coursework'));
+                $this->_form->createElement('submit', 'finalisebutton', get_string('submitandfinalise', 'coursework'));
         }
         $button_array[] = $this->_form->createElement('cancel');
         $this->_form->addGroup($button_array, 'buttonar', '', array(' '), false);

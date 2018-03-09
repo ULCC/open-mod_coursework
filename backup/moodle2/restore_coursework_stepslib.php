@@ -46,7 +46,8 @@ class restore_coursework_activity_structure_step extends restore_activity_struct
                         'mod_set_member'=>'coursework_mod_set_members',
                         'sample_set_mbr'=>'coursework_sample_set_mbrs',
                         'extension'=>'coursework_extensions',
-                        'person_deadline'=>'coursework_person_deadlines');
+                        'person_deadline'=>'coursework_person_deadlines',
+                        'mod_agreement' => 'coursework_submissions/coursework_submission/coursework_feedbacks/coursework_feedback/coursework_mod_agreements');
 
 
             foreach($bits as $bit=>$bitpath)
@@ -142,7 +143,8 @@ class restore_coursework_activity_structure_step extends restore_activity_struct
                                   'feedbackcommentformat'=>FORMAT_HTML,
                                   'entry_id'=>0,
                                   'markernumber'=>0,
-                                  'stage_identifier'=>''),$data);
+                                  'stage_identifier'=>'',
+                                  'finalised'=>0),$data);
 
         $newitemid = $DB->insert_record('coursework_feedbacks', $data);
 
@@ -315,6 +317,34 @@ class restore_coursework_activity_structure_step extends restore_activity_struct
         $newitemid = $DB->insert_record('coursework_person_deadlines', $data);
     }
 
+
+
+
+
+    protected function process_coursework_mod_agreement($data)
+    {
+        $data=(object)$data;
+
+        $data->feedbackid=$this->get_new_parentid('coursework_feedback');
+        $data->moderatorid = $this->get_mappingid('user', $data->moderatorid);
+        $data->lastmodifiedby=$this->get_mappingid('user',$data->lastmodifiedby);
+
+        $this->fixallocatable($data);
+
+        $this->updatedate(array('timecreated',
+                                'timemodified'),$data);
+
+        $now=time();
+        $this->set_defaults(array('timecreated'=>$now,
+                                  'timemodified'=>$now,
+                                  'lasteditedby'=>0,
+                                  'modcomment'=>'',
+                                  'modcommentformat'=>1),$data);
+
+        global $DB;
+        $newitemid = $DB->insert_record('coursework_mod_agreements', $data);
+    }
+
     /**
      * Process a courswork restore.
      *
@@ -397,7 +427,10 @@ class restore_coursework_activity_structure_step extends restore_activity_struct
                                     'submissionnotification'=>'',
                                     'extension'=>0,
                                   'relativeinitialmarkingdeadline'=>0,
-                                  'relativeagreedmarkingdeadline'=>0), $data);
+                                  'relativeagreedmarkingdeadline'=>0,
+                                  'autopopulatefeedbackcomment'=>0,
+                                  'moderationagreementenabled'=>0,
+                                  'draftfeedbackenabled'=>0 ), $data);
 
         $this->check_grade('grade',$data);
 

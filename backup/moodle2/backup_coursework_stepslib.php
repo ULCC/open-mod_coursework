@@ -81,7 +81,10 @@ class backup_coursework_activity_structure_step extends backup_activity_structur
                                                     'submissionnotification',
                                                     'personaldeadlineenabled',
                                                     'relativeinitialmarkingdeadline',
-                                                    'relativeagreedmarkingdeadline'
+                                                    'relativeagreedmarkingdeadline',
+                                                    'autopopulatefeedbackcomment',
+                                                    'moderationagreementenabled',
+                                                    'draftfeedbackenabled'
                                                   ));
 
 
@@ -105,6 +108,23 @@ class backup_coursework_activity_structure_step extends backup_activity_structur
 
         if($userinfo)
         {
+
+            $moderation_agreements  =   new backup_nested_element('coursework_mod_agreements');
+
+            $moderation_agreement =   new backup_nested_element('coursework_mod_agreement', array('id'),
+                                                    array(
+                                                        "feedbackid",
+                                                        "moderatorid",
+                                                        "agreement",
+                                                        "timecreated",
+                                                        "timemodified",
+                                                        "lasteditedby",
+                                                        "modcomment",
+                                                        "modecommentformat"
+                                                    ));
+
+
+
             $feedbacks=new backup_nested_element('coursework_feedbacks');
 
             $feedback= new backup_nested_element('coursework_feedback',array('id'),
@@ -124,6 +144,7 @@ class backup_coursework_activity_structure_step extends backup_activity_structur
                                                      "entry_id",
                                                      "markernumber",
                                                      "stage_identifier",
+                                                     "finalised"
                                                  ));
 
             $submissions=new backup_nested_element('coursework_submissions');
@@ -283,6 +304,9 @@ class backup_coursework_activity_structure_step extends backup_activity_structur
             //Feedbacks is a set of individual items
             $feedbacks->add_child($feedback);
 
+            $feedback->add_child($moderation_agreements);
+            $moderation_agreements->add_child($moderation_agreement);
+
             //as are reminders, pairs, extensions, modsets and modsetrules,
             // and allocation configs
             $reminders->add_child($reminder);
@@ -299,6 +323,9 @@ class backup_coursework_activity_structure_step extends backup_activity_structur
 
             $feedback->set_source_table('coursework_feedbacks',
                                         array('submissionid'=>backup::VAR_PARENTID));
+
+            $moderation_agreement->set_source_table('coursework_mod_agreements',
+                                        array('feedbackid'=>backup::VAR_PARENTID));
 
             $reminder->set_source_table('coursework_reminder',
                                         array('coursework_id'=>backup::VAR_PARENTID));
@@ -354,6 +381,10 @@ class backup_coursework_activity_structure_step extends backup_activity_structur
 
             $sample_member->annotate_ids('user','allocatableuser');
             $sample_member->annotate_ids('group','allocatablegroup');
+
+            $moderation_agreement->annotate_ids('user','moderatorid');
+            $moderation_agreement->annotate_ids('user','lasteditedby');
+
 
             $coursework->annotate_files('mod_coursework','feedback',null);
             $coursework->annotate_files('mod_coursework','submission',null);

@@ -71,13 +71,13 @@ class mod_coursework_mod_form extends moodleform_mod {
         $this->add_submission_deadline_field();
         $this->add_personal_deadline_field();
         
-        if (coursework_is_ulcc_digest_coursework_plugin_installed()) {
+       // if (coursework_is_ulcc_digest_coursework_plugin_installed()) {
             $this->add_marking_deadline_field();
             $this->add_initial_marking_deadline_field();
             $this->add_agreed_grade_marking_deadline_field();
             $this->add_relative_initial_marking_deadline_field();
             $this->add_relative_agreed_grade_marking_deadline_field();
-        }
+       // }
 
         $this->add_allow_early_finalisation_field();
         $this->add_allow_late_submissions_field();
@@ -102,12 +102,15 @@ class mod_coursework_mod_form extends moodleform_mod {
         $this->add_marking_workflow_header();
 
         $this->add_number_of_initial_assessors_field();
+        $this->add_enable_moderation_agreement_field();
+
         $this->add_enable_allocation_field();
         $this->add_assessor_allocation_strategy_field_checkboxes();
         $this->add_enable_sampling_checkbox();
         $this->add_automatic_agreement_enabled();
         $this->add_view_initial_assessors_grade();
         $this->add_enable_agreed_grade_delay();
+        $this->add_save_feedback_as_draft();
         $this->add_auto_populate_agreed_feedback_comments();
 
         $this->add_blind_marking_header();
@@ -257,6 +260,9 @@ class mod_coursework_mod_form extends moodleform_mod {
 
     }
 
+
+
+
     /**
      * Get data from the form and manipulate it
      * @return bool|object
@@ -271,6 +277,10 @@ class mod_coursework_mod_form extends moodleform_mod {
 
         if ($this->forceblindmarking() == 1){
            $data->blindmarking = $CFG->coursework_blindmarking;
+        }
+
+        if($data->numberofmarkers >1){
+            $data->moderationagreementenabled = 0;
         }
 
         return $data;
@@ -540,6 +550,7 @@ class mod_coursework_mod_form extends moodleform_mod {
             array('optional' => true, 'disabled' => $disabled)
         );
 
+       // $moodle_form->disabledIf('agreedgrademarkingdeadline', 'numberofmarkers', 'eq', '1');
 
         if (!empty($CFG->coursework_agreed_marking_deadline)) $moodle_form->setDefault('agreedgrademarkingdeadline', $default_timestamp);
         $moodle_form->addHelpButton('agreedgrademarkingdeadline', 'agreedgrademarkingdeadline', 'mod_coursework');
@@ -819,6 +830,22 @@ class mod_coursework_mod_form extends moodleform_mod {
         $moodle_form->addHelpButton('numberofmarkers', 'numberofmarkers', 'mod_coursework');
         $moodle_form->setDefault('numberofmarkers', 1);
     }
+
+
+    /**
+     * @param $moodle_form
+     * @throws coding_exception
+     */
+    protected function add_enable_moderation_agreement_field(){
+        $moodle_form =& $this->_form;
+
+        $options = array(0 => get_string('no'), 1 => get_string('yes'));
+        $moodle_form->addElement('select', 'moderationagreementenabled', get_string('moderationagreementenabled', 'mod_coursework'),$options);
+        $moodle_form->addHelpButton('moderationagreementenabled', 'moderationagreementenabled', 'mod_coursework');
+        $moodle_form->setDefault('moderationagreementenabled', 0);
+        $moodle_form->disabledIf('moderationagreementenabled', 'numberofmarkers', 'neq', 1);
+    }
+
 
     /**
      * @return int
@@ -1185,6 +1212,21 @@ class mod_coursework_mod_form extends moodleform_mod {
     }
 
     /**
+     *
+     */
+    private function add_save_feedback_as_draft()    {
+
+        $moodle_form =& $this->_form;
+
+        $options = array(0 => get_string('no'), 1 => get_string('yes'));
+
+        $moodle_form->addElement('select', 'draftfeedbackenabled', get_string('savefeedbackasdraft', 'mod_coursework'), $options);
+        $moodle_form->addHelpButton('draftfeedbackenabled', 'savefeedbackasdraft', 'mod_coursework');
+        $moodle_form->setDefault('draftfeedbackenabled', 1);
+
+    }
+
+    /**
      * @throws coding_exception
      */
     private function add_auto_populate_agreed_feedback_comments(){
@@ -1237,11 +1279,11 @@ class mod_coursework_mod_form extends moodleform_mod {
 
         $selectableusers    =   array();
 
-        $enrolledusers  =   get_enrolled_users(context_course::instance($COURSE->id));
-
-        foreach($enrolledusers  as $u) {
-            if (!has_capability('mod/coursework:submit',context_course::instance($COURSE->id),$u)) {
-                $selectableusers[$u->id]    =   fullname($u);
+        // capability for user allowed to receive submission notifications
+        $enrolledusers  =   get_enrolled_users(context_course::instance($COURSE->id), 'mod/coursework:receivesubmissionnotifications');
+        if($enrolledusers) {
+            foreach ($enrolledusers as $u) {
+                $selectableusers[$u->id] = fullname($u);
             }
         }
 

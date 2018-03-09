@@ -192,6 +192,9 @@ class mod_coursework_generator extends testing_module_generator {
         if (!isset($feedback->ismoderation)) {
             $feedback->ismoderation = 0;
         }
+        if (!isset($feedback->finalised)) {
+            $feedback->finalised = 1;
+        }
 
         $feedback->save();
 

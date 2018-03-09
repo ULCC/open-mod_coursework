@@ -2,10 +2,12 @@
 use mod_coursework\ability;
 use mod_coursework\forms\assessor_feedback_mform;
 use mod_coursework\forms\student_submission_form;
+use mod_coursework\forms\moderator_agreement_mform;
 use mod_coursework\models\coursework;
 use mod_coursework\models\user;
 use mod_coursework\models\feedback;
 use mod_coursework\models\submission;
+use mod_coursework\models\moderation;
 use mod_coursework\router;
 use mod_coursework\warnings;
 
@@ -86,6 +88,53 @@ class mod_coursework_page_renderer extends plugin_renderer_base {
         $teacher_feedback->feedback_manager = $draftitemid;
 
         $simple_form->set_data($teacher_feedback);
+
+        echo $OUTPUT->header();
+        echo $html;
+        $simple_form->display();
+        echo $OUTPUT->footer();
+    }
+
+
+    /**
+     * Renders the HTML for the edit page
+     *
+     * @param moderation $moderator_agreement
+     * @param $assessor
+     * @param $editor
+     */
+    public function edit_moderation_page(moderation $moderator_agreement, $assessor, $editor) {
+
+        global $PAGE, $SITE, $OUTPUT;
+
+        $title =
+            get_string('moderationfor', 'coursework', $moderator_agreement->get_submission()->get_allocatable_name());
+
+        $PAGE->set_pagelayout('standard');
+        $PAGE->navbar->add($title);
+        $PAGE->set_title($SITE->fullname);
+        $PAGE->set_heading($SITE->fullname);
+
+        $html = '';
+
+        $moderatedby = fullname($assessor);
+        $lasteditedby = fullname($editor);
+
+        $html .= $OUTPUT->heading($title);
+        $html .= '<table class = "moderating-details">';
+        $html .= '<tr><th>' . get_string('moderatedby', 'coursework') . '</th><td>' . $moderatedby . '</td></tr>';
+        $html .= '<tr><th>' . get_string('lasteditedby', 'coursework') . '</th><td>' . $lasteditedby . ' on ' .
+            userdate($moderator_agreement->timemodified, '%a, %d %b %Y, %H:%M') . '</td></tr>';
+        $html .= '</table>';
+
+        $submit_url = $this->get_router()->get_path('update moderation', array('moderation' => $moderator_agreement));
+        $simple_form = new moderator_agreement_mform($submit_url, array('moderation' => $moderator_agreement));
+
+        $moderator_agreement->modcomment = array('text' => $moderator_agreement->modcomment,
+                                                'format' => $moderator_agreement->modcommentformat);
+
+
+        $simple_form->set_data($moderator_agreement);
 
         echo $OUTPUT->header();
         echo $html;
@@ -286,6 +335,39 @@ class mod_coursework_page_renderer extends plugin_renderer_base {
         $simple_form->display();
         echo $OUTPUT->footer();
     }
+
+    /**
+     * @param moderation $new_moderation
+     * @throws coding_exception
+     */
+    public function new_moderation_page($new_moderation){
+
+        global $PAGE, $OUTPUT, $SITE, $DB;
+
+        $submission = $new_moderation->get_submission();
+        $grading_title = get_string('moderationfor', 'coursework', $submission->get_allocatable_name());
+
+        $PAGE->set_pagelayout('standard');
+        $PAGE->navbar->add($grading_title);
+        $PAGE->set_title($SITE->fullname);
+        $PAGE->set_heading($SITE->fullname);
+
+        $html = '';
+
+        $html .= $OUTPUT->heading($grading_title);
+        $html .= '<table class = "moderating-details">';
+        $moderator = $DB->get_record('user', array('id' => $new_moderation->moderatorid));
+        $html .= '<tr><th>' . get_string('moderator', 'coursework') . '</th><td>' . fullname($moderator) . '</td></tr>';
+        $html .= '</table>';
+
+        $submit_url = $this->get_router()->get_path('create moderation agreement', array('moderation' => $new_moderation));
+        $simple_form = new moderator_agreement_mform($submit_url, array('moderation' => $new_moderation));
+        echo $OUTPUT->header();
+        echo $html;
+        $simple_form->display();
+        echo $OUTPUT->footer();
+    }
+
 
     /**
      * @param coursework $coursework

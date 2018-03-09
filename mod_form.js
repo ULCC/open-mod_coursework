@@ -20,6 +20,12 @@ M.mod_coursework.init   =   function()      {
 
         M.mod_coursework.elementEnable();
     });
+
+
+    $('#id_numberofmarkers').on('change',function () {
+
+        M.mod_coursework.elementEnable();
+    });
 }
 
 
@@ -67,6 +73,11 @@ M.mod_coursework.elementEnable      =   function()      {
         M.mod_coursework.initialGradeDisable(true);
         M.mod_coursework.agreedGradeDisable(true);
         M.mod_coursework.relativeInitalGradeDisable(true);
+        M.mod_coursework.relativeAgreedGradeDisable(true);
+    }
+
+    if(    $( "#id_numberofmarkers" ).val() == 1) {
+        M.mod_coursework.agreedGradeDisable(true);
         M.mod_coursework.relativeAgreedGradeDisable(true);
     }
 

@@ -10,6 +10,7 @@ use mod_coursework\models\personal_deadline;
 use mod_coursework\models\feedback;
 use mod_coursework\models\submission;
 use mod_coursework\models\user;
+use mod_coursework\models\moderation;
 
 /**
  * This class provides a central point where all of the can/cannot decisions are stored.
@@ -116,6 +117,18 @@ class ability extends \mod_coursework\framework\ability {
         $this->allow_view_plagiarism_submission_when_in_finalised_state();
         $this->allow_view_plagiarism_submission_when_in_published_state();
 
+        // Moderations rules
+        // new moderation
+        $this->prevent_new_moderation_if_user_is_not_allocated_to_moderate();
+        $this->allow_new_moderation_if_user_can_moderate();
+        $this->allow_new_moderation_if_user_is_allocated_to_moderate();
+
+        // edit moderation
+        $this->allow_edit_moderation_if_user_created_moderation_and_can_edit();
+        $this->allow_edit_moderation_if_user_is_allocated_to_moderate();
+
+
+
         // Feedback rules
 
         // New feedback
@@ -144,6 +157,7 @@ class ability extends \mod_coursework\framework\ability {
         $this->allow_edit_feedback_if_user_created_feedback_and_is_initial_feedback_and_has_permission();
         $this->allow_edit_feedback_if_agreed_feedback_and_user_is_stage_assessor_and_has_permission();
         $this->allow_edit_feedback_if_agreed_feedback_and_user_marked_initial_stage_and_has_permission();
+        $this->allow_edit_own_feedback_if_in_draft();
 
         // Update feedback
         $this->allow_update_feedback_if_can_edit_feeback();
@@ -586,6 +600,63 @@ class ability extends \mod_coursework\framework\ability {
             });
     }
 
+    protected function allow_new_moderation_if_user_can_moderate() {
+        $this->allow('new',
+            'mod_coursework\models\moderation',
+            function (moderation $moderation) {
+                return has_capability('mod/coursework:moderate',
+                    $moderation->get_coursework()
+                        ->get_context());
+            });
+    }
+
+    protected function allow_new_moderation_if_user_is_allocated_to_moderate() {
+        $this->allow('new',
+            'mod_coursework\models\moderation',
+            function (moderation $moderation) {
+                $is_allocated = false;
+                if($moderation->get_coursework()->allocation_enabled()) {
+                    $is_allocated = $moderation->is_moderator_allocated();
+                }
+                return  $is_allocated;
+            });
+    }
+
+
+    protected function prevent_new_moderation_if_user_is_not_allocated_to_moderate() {
+        $this->prevent('new',
+            'mod_coursework\models\moderation',
+            function (moderation $moderation) {
+                $is_allocated = false;
+                if($moderation->get_coursework()->allocation_enabled() && !is_siteadmin()) {
+                    $is_allocated = !$moderation->is_moderator_allocated();
+                }
+                return  $is_allocated;
+            });
+    }
+
+
+
+    protected function allow_edit_moderation_if_user_created_moderation_and_can_edit() {
+        $this->allow('edit',
+            'mod_coursework\models\moderation',
+            function (moderation $moderation) {
+                   $has_capability = has_capability('mod/coursework:moderate',  $moderation->get_coursework()
+                    ->get_context());
+                $is_creator = $moderation->moderatorid == $this->get_user()->id;
+                return $has_capability && ($is_creator || is_siteadmin()) ;
+            });
+    }
+
+    protected function allow_edit_moderation_if_user_is_allocated_to_moderate() {
+        $this->allow('edit',
+            'mod_coursework\models\moderation',
+            function (moderation $moderation) {
+                $is_allocated = $moderation->is_moderator_allocated();
+                return  $is_allocated;
+            });
+    }
+
     protected function prevent_new_feedback_with_no_submission() {
         $this->prevent('new',
                        'mod_coursework\models\feedback',
@@ -765,7 +836,7 @@ class ability extends \mod_coursework\framework\ability {
                 if (!$stage->user_is_assessor($this->get_user()) &&
                     !(has_capability('mod/coursework:editallocatedagreedgrade',
                             $feedback->get_coursework()
-                                ->get_context()) && $feedback->get_submission()->is_assessor_initial_grader())) {
+                                ->get_context()) && $feedback->get_submission()->is_assessor_initial_grader()) && !$feedback->get_submission()->editable_final_feedback_exist()) {
                     $this->set_message('user is not assessor to edit the feedback');
                     return true;
                 }
@@ -812,6 +883,15 @@ class ability extends \mod_coursework\framework\ability {
             });
     }
 
+    protected function allow_edit_own_feedback_if_in_draft() {
+        $this->allow('edit',
+            'mod_coursework\models\feedback',
+            function (feedback $feedback) {
+                $is_creator = $feedback->assessorid == $this->get_user()->id;
+                $stage = $feedback->get_stage();
+                return  $is_creator && ($feedback->get_submission()->editable_feedbacks_exist() || ($feedback->get_submission()->editable_final_feedback_exist() && !$stage->is_initial_assesor_stage()));
+            });
+    }
 
     protected function allow_update_feedback_if_can_edit_feeback() {
         $this->allow('update',
@@ -1046,7 +1126,7 @@ class ability extends \mod_coursework\framework\ability {
                 }
 
 
-                return $feedback->is_agreed_grade() && $has_editable_feedbacks && (has_capability('mod/coursework:addagreedgrade',
+                return $feedback->is_agreed_grade() && !$has_editable_feedbacks && (has_capability('mod/coursework:addagreedgrade',
                                                                       $feedback->get_coursework()
                                                                           ->get_context())
                                                         || has_capability('mod/coursework:addallocatedagreedgrade',

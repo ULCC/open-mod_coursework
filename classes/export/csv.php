@@ -116,7 +116,7 @@ class csv {
             $cell = new $class($this->coursework);
             if(substr($csv_cell,0,8) == 'assessor'){
                 $row[] = $cell->get_cell($submission, $student, $stage_dentifier);
-            } else if ($csv_cell != 'stages' && $csv_cell != 'otherassessors'){
+            } else if ($csv_cell != 'stages' && $csv_cell != 'moderationagreement' && $csv_cell != 'otherassessors'){
                 $row[] = $cell->get_cell($submission, $student, false);
             } else {
 
@@ -144,7 +144,7 @@ class csv {
                 $cell = new $class($this->coursework);
                 if(substr($header,0,8) == 'assessor'){
                     $headers[$header.$stage] = $cell->get_header($stage);
-                } else if ($header != 'stages' && $header != 'otherassessors' ) {
+                } else if ($header != 'stages' && $header != 'moderationagreement' && $header != 'otherassessors' ) {
                     $headers[$header] = $cell->get_header(false);
                 } else {
                     $array_headers = $cell->get_header(false);
@@ -210,10 +210,9 @@ class csv {
 
         $csv_data = array();
         // retrieve all students (even if group coursework)
-        $students = $submission->students_for_gradebook();
+        $students = $submission->get_students();
 
         foreach ($students as $student) {
-            $student = \mod_coursework\models\user::find($student);
             $csv_data[] = $this->add_cells_to_array($submission, $student, $this->csv_cells);
         }
 

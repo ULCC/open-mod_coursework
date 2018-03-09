@@ -52,6 +52,13 @@ class builder {
     }
 
     /**
+     * @return \html_table_cell
+     */
+    public function get_renderable_moderation_table_cell() {
+        return $this->prepare_moderation_table_cell();
+    }
+
+    /**
      * Makes the dropdown showing what teachers can mark this coursework.
      *
      * @return string
@@ -71,6 +78,32 @@ class builder {
     }
 
     /**
+     * @return string
+     */
+    private function get_potential_moderators_dropdown(){
+
+        if ($this->stage_does_not_use_allocation()) {
+            return '';
+        }
+        if ($this->has_moderation()) {
+            return '';
+        }
+
+        return $this->get_stage()->potential_moderator_dropdown($this->get_allocatable());
+    }
+
+    /**
+     * @return bool
+     */
+    private function has_moderation(){
+        if ($this->get_submission()){
+            return $this->get_stage()->has_moderation($this->get_submission());
+        } else {
+            return false;
+        }
+    }
+
+    /**
      * @return bool
      */
     private function has_feedback() {
@@ -82,6 +115,17 @@ class builder {
      */
     private function get_feedback() {
         return $this->get_stage()->get_feedback_for_allocatable($this->get_allocatable());
+    }
+
+
+    /**
+     * @return bool|\mod_coursework\models\moderation
+     */
+    private function get_moderation() {
+        if ($this->get_submission()){
+            return $this->get_stage()->get_moderation($this->get_submission());
+        }
+        return false;
     }
 
     /**
@@ -166,6 +210,52 @@ class builder {
         ';
     }
 
+    /**
+     * @return string
+     */
+    private function prepare_moderation_table_cell(){
+
+        $contents = '';
+        $class = 'moderators';
+        $moderator_dropdown = '';
+
+        if ($this->coursework->allocation_enabled()) {
+            $moderator_dropdown = $this->get_potential_moderators_dropdown();
+        }
+
+        $moderator_name = '';
+        if ($this->has_moderation()) {
+            $class .= ' has-moderation-agreement ';
+
+            $moderation = $this->get_moderation();
+            $moderator = $moderation->moderator();
+            $moderator_name = $moderator->profile_link();
+            $moderator_name .= '<br>';
+            $moderator_name .= 'Agreement: ';
+            $moderator_name .= get_string($this->get_moderation()->agreement, 'coursework');
+        } else if ($this->has_allocation()) {
+            $moderator_name = ' ' . $this->pinned_checkbox($moderator_dropdown);
+            $moderator_name .= $this->get_stage()->get_allocated_assessor_name($this->get_allocatable());
+        }
+
+
+        if ($moderator_name) {
+            $contents .= '<br>';
+            $contents .= "<span class='existing-moderator'>{$moderator_name}</span>";
+        }
+
+
+        if ($moderator_dropdown) {
+            $contents .= '<br>';
+            $contents .= $moderator_dropdown;
+        }
+        return '
+            <td class="' . $class . '">
+            '.$contents.'
+            </td>
+        ';
+    }
+
 
     /**
      * @return allocatable
@@ -191,6 +281,9 @@ class builder {
         if ($this->get_stage()->allocatable_is_in_sample($this->get_allocatable()) || $this->get_stage()->identifier() == 'assessor_1') {
             $checkbox_checked = 1;
         }
+
+        $checkbox_checked   =   $this->checkbox_checked_in_session($checkbox_name,$checkbox_checked);
+
         $checkbox_title = 'Included in sample';
 
         $attributes = array('class' => 'sampling_set_checkbox',
@@ -251,6 +344,9 @@ class builder {
      * @return string
      */
     private function pinned_checkbox() {
+
+
+
         $checkbox_name =
             'allocatables[' . $this->get_allocatable()->id . '][' . $this->get_stage()->identifier() . '][pinned]';
         $checkbox_checked = 0;
@@ -259,18 +355,39 @@ class builder {
                 $checkbox_checked = 1;
             }
         }
+
+        $checkbox_checked   =   $this->checkbox_checked_in_session($checkbox_name,$checkbox_checked);
+
+        $stage = substr($this->get_stage()->identifier(), -1);
         $checkbox_title = 'Pinned (auto allocations will not alter this)';
         return \html_writer::checkbox($checkbox_name,
                                                      1,
                                                      $checkbox_checked,
                                                      '',
-                                                     array('class' => 'pinned',
+                                                     array('class' => "pinned pin_$stage",
                                                            'title' => $checkbox_title));
     }
 
 
 
+    private function checkbox_checked_in_session($checkboxname,$checkboxstate)  {
 
+        global  $SESSION;
+
+        $cm =   $this->coursework->get_course_module();
+
+        if (!empty($SESSION->coursework_allocationsessions[$cm->id]))   {
+            if (isset($SESSION->coursework_allocationsessions[$cm->id][$checkboxname]))    {
+                return  $SESSION->coursework_allocationsessions[$cm->id][$checkboxname];
+            }
+
+
+
+        }
+
+        return $checkboxstate;
+
+    }
 
     /**
      * @return bool

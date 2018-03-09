@@ -2500,18 +2500,7 @@ class behat_mod_coursework extends behat_base {
      */
     public function theFileUploadButtonShouldNotBeVisible() {
 
-        $filepickercontainer = $this->find(
-            'xpath',
-            "//input[./@id = //label[normalize-space(.)='Upload a file']/@for]" .
-            "//ancestor::div[contains(concat(' ', normalize-space(@class), ' '), ' ffilemanager ') or " .
-            "contains(concat(' ', normalize-space(@class), ' '), ' ffilepicker ')]"
-        );
-
-        /**
-         * @var Behat\Mink\Element\NodeElement $button
-         */
-        $exception = new ExpectationException('The add file button could not be found', $this->getSession());
-        $button = $this->find('css', 'div.fp-btn-add a', $exception, $filepickercontainer);
+        $button = $this->find('css', 'div.fp-btn-add a');
 
         assertFalse($button->isVisible(), "The file picker upload buton should be hidden, but it isn't");
     }
@@ -2542,8 +2531,13 @@ class behat_mod_coursework extends behat_base {
      * @param string $action
      */
     public function iShouldNotSeeTheEditSubmissionButton($negate = false, $action = 'new') {
-        $buttons = $this->getSession()->getPage()
+        // behat generates button type submit whereas code does input
+        $input = $this->getSession()->getPage()
             ->findAll('xpath', "//div[@class='{$action}submissionbutton']//input[@type='submit']");
+        $button = $this->getSession()->getPage()
+            ->findAll('xpath', "//div[@class='{$action}submissionbutton']//button[@type='submit']");
+        $buttons = ($input)? $input : $button;// check how element was created and use it to find the button
+
         assertCount(($negate ? 0 : 1), $buttons);
     }
 

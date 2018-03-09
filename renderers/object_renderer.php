@@ -443,7 +443,11 @@ class mod_coursework_object_renderer extends plugin_renderer_base {
      */
     protected function render_mod_coursework_allocation_table(mod_coursework_allocation_table $allocation_table) {
 
-        $table_html = '
+        global $PAGE, $OUTPUT, $SESSION;
+
+        $table_html =   $allocation_table->get_hidden_elements();
+
+        $table_html .= '
 
             <table class="allocations display">
                 <thead>
@@ -451,6 +455,34 @@ class mod_coursework_object_renderer extends plugin_renderer_base {
 
         ';
 
+
+        $options    =   $allocation_table->get_options();
+
+        $paging_bar = new paging_bar($allocation_table->get_participant_count(), $options['page'], $options['perpage'],
+            $PAGE->url, 'page');
+
+        $all = count($allocation_table->get_coursework()->get_allocatables());
+
+        $records_per_page = array(3 => 3,
+            10 => 10,
+            20 => 20,
+            30 => 30,
+            40 => 40,
+            50 => 50,
+            100 => 100,
+            $all => get_string('all', 'mod_coursework')); // for boost themes instead of 'all' we can put 0, however currently it is a bug
+
+        $single_select_params = compact('sortby', 'sorthow', 'page');
+        $single_select_params['page'] = '0';
+        $select = new single_select($PAGE->url, 'per_page', $records_per_page, $options['perpage'], null);
+        $select->label = get_string('records_per_page', 'coursework');
+        $select->class = 'jumpmenu';
+        $select->formid = 'sectionmenu';
+        $table_html     .=  $OUTPUT->render($select);
+
+
+
+        //get the hidden elements used for assessors and moderators selected on other pages;
 
         $allocatable_cell_helper = $allocation_table->get_allocatable_cell();
         $table_html .= '<th>';
@@ -461,9 +493,21 @@ class mod_coursework_object_renderer extends plugin_renderer_base {
         foreach ($allocation_table->marking_stages() as $stage) {
             if ($stage->uses_allocation()) {
                 $table_html .= '<th>';
+                // pin all checkbox
+                $checkbox_title = get_string('selectalltopin', 'coursework');
                 if ($stage->allocation_table_header() == 'Assessor') {
                     $no++;
+                    if ($stage->stage_has_allocation() ) {// has any pins
+                        $table_html .= '<input type="checkbox" name="" id="selectall_' . $no . '" title = "' . $checkbox_title . '">';
+                    }
                     $table_html .= $stage->allocation_table_header() . ' ' . $no;
+                } else if ($allocation_table->get_coursework()->moderation_agreement_enabled()) {
+                    //moderator header
+                    if ($stage->stage_has_allocation() ) {// has any pins
+                        $table_html .= '<input type="checkbox" name="" id="selectall_mod" title = "' . $checkbox_title . '">';
+                    }
+                    $table_html .= get_string('moderator', 'coursework');
+
                 } else {
                     $table_html .= $stage->allocation_table_header();
                 }
@@ -477,7 +521,7 @@ class mod_coursework_object_renderer extends plugin_renderer_base {
                 <tbody>
         ';
 
-        $rowdata = $allocation_table->get_rows();
+        $rowdata = $allocation_table->get_table_rows_for_page();
         foreach ($rowdata as $row) {
             $table_html .= $this->render_allocation_table_row($row);
         }
@@ -486,6 +530,19 @@ class mod_coursework_object_renderer extends plugin_renderer_base {
                 </tbody>
             </table>
         ';
+        //form save button.
+
+        $attributes = array('name' => 'save',
+            'type' => 'submit',
+            'id' => 'save_manual_allocations_1',
+            'value' => get_string('save', 'mod_coursework'));
+        $table_html .= html_writer::empty_tag('input', $attributes);
+
+        $table_html     .=  $OUTPUT->render($select);
+
+
+
+        $table_html .=  $PAGE->get_renderer('mod_coursework', 'object')->render($paging_bar);
 
         return $table_html;
     }
@@ -517,6 +574,7 @@ class mod_coursework_object_renderer extends plugin_renderer_base {
         return $row;
     }
 
+
     /**
      * Outputs the buttons etc to choose and trigger the auto allocation mechanism. Do this as part of the main form so we
      * can choose some allocations, then click a button to auto-allocate the rest.
@@ -528,7 +586,8 @@ class mod_coursework_object_renderer extends plugin_renderer_base {
 
         global $OUTPUT;
 
-        $html = html_writer::tag('h2',get_string('allocateassessorsandmoderators', 'mod_coursework'));
+        $lang_str = ($allocationwidget->get_coursework()->moderation_agreement_enabled())? 'allocateassessorsandmoderators':'allocateassessors';
+        $html = html_writer::tag('h2',get_string($lang_str, 'mod_coursework'));
 
         $html .= '<div class="assessor-allocation-wrapper accordion">';
 
@@ -553,19 +612,31 @@ class mod_coursework_object_renderer extends plugin_renderer_base {
         $html .= $this->get_allocation_strategy_form_elements($allocationwidget->get_coursework());
         $html .= html_writer::end_tag('div');
         $html .= "<br>";
-
+        $attributes = array('id' => 'coursework_input_buttons');
+        $html .= html_writer::start_tag('div', $attributes);
         // Spacer so we get the button underneath the form stuff.
         $attributes = array('class' => 'coursework_spacer');
         $html .= html_writer::start_tag('div', $attributes);
         $html .= html_writer::end_tag('div');
 
+
+
+
         // Save button.
         $attributes = array('name' => 'save',
-                            'type' => 'submit',
-                            'id' => 'save_assessor_allocation_strategy',
-                            'value' => get_string('save', 'mod_coursework'));
+            'type' => 'submit',
+            'id' => 'save_assessor_allocation_strategy',
+            'class' => 'coursework_assessor_allocation',
+            'value' => get_string('apply', 'mod_coursework'));
         $html .= html_writer::empty_tag('input', $attributes);
 
+        $attributes = array('name' => 'saveandexit',
+            'type' => 'submit',
+            'id' => 'save_and_exit_assessor_allocation_strategy',
+            'class' => 'coursework_assessor_allocation',
+            'value' => get_string('save_and_exit', 'mod_coursework'));
+        $html .= html_writer::empty_tag('input', $attributes);
+        $html .= html_writer::end_tag('div');
         $html .= '</div>';
         $html .= '</div>';
 
@@ -1036,7 +1107,7 @@ class mod_coursework_object_renderer extends plugin_renderer_base {
         $url = "{$CFG->wwwroot}/pluginfile.php/{$file->get_contextid()}" .
             "/mod_coursework/{$files->get_file_area_name()}";
         $filename = $file->get_filename();
-        $fileurl = $url . $file->get_filepath() . $file->get_itemid() . '/' . $filename;
+        $fileurl = $url . $file->get_filepath() . $file->get_itemid() . '/' . rawurlencode($filename);
         return html_writer::link($fileurl, $filename, array('class' => $class_name));
     }
 
@@ -1188,9 +1259,14 @@ class mod_coursework_object_renderer extends plugin_renderer_base {
         $row_html .= $allocatable_cell_helper->get_table_cell($allocation_row);
 
         foreach ($allocation_row->marking_stages() as $stage) {
-            if ($stage->uses_allocation()) {
+            if ($stage->uses_allocation() && $stage->identifier() != 'moderator') {
                 $row_html .= $stage->get_allocation_table_cell($allocation_row->get_allocatable());
             }
+        }
+
+        // moderator
+        if($allocation_row->get_coursework()->moderation_agreement_enabled()) {
+            $row_html .= $stage->get_moderation_table_cell($allocation_row->get_allocatable());
         }
 
         $row_html .= '</tr>';

@@ -109,12 +109,12 @@ class router {
                 $url = new moodle_url('/mod/coursework/actions/feedbacks/new.php', $params);
                 break;
 
-            case 'new moderator feedback':
+            /*case 'new moderator feedback':
                 $url = new moodle_url('/mod/coursework/actions/feedbacks/new.php',
                                       array('submissionid' => $items['submission']->id,
                                             'stage_identifier' => $items['stage']->identifier(),
                                             'ismoderation' => 1));
-                break;
+                break;*/
 
             case 'new submission':
                 $url = new moodle_url('/mod/coursework/actions/submissions/new.php',
@@ -154,6 +154,28 @@ class router {
                 $url = new moodle_url('/mod/coursework/actions/set_personal_deadlines.php',
                     array('id' => $coursemodule_id));
                 break;
+
+            case 'new moderations':
+                $params = array('submissionid' => $items['submission']->id,
+                                'stage_identifier' => $items['stage']->identifier(),
+                                'feedbackid' =>$items['feedbackid']);
+                $url = new moodle_url('/mod/coursework/actions/moderations/new.php',$params);
+                break;
+
+            case 'create moderation agreement':
+                $url = new moodle_url('/mod/coursework/actions/moderations/create.php');
+                break;
+
+            case 'edit moderation':
+                $url = new moodle_url('/mod/coursework/actions/moderations/edit.php',
+                                      array('moderationid' => $items['moderation']->id,
+                                           'feedbackid' =>$items['moderation']->feedbackid));
+                break;
+
+            case 'update moderation':
+                $url = new moodle_url('/mod/coursework/actions/moderations/update.php');
+                break;
+
         }
 
         if (!$url) {

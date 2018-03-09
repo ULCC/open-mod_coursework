@@ -339,5 +339,11 @@ abstract class grading_table_row_base implements user_row {
         return $this->get_submission()->get_assessor_feedbacks();
     }
 
+    /**
+     * @return models\feedback
+     */
+    public function get_single_feedback(){
+        return $this->get_submission()->get_assessor_feedback_by_stage('assessor_1');
+    }
 
 }

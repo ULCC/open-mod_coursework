@@ -190,7 +190,7 @@ class submission extends table_base implements \renderable {
     const PUBLISHED = 64;
 
     /**
-     * @var stdClass The allocation record for this moderation (if there is one)
+     * @var stdClass The allocation record for this moderations (if there is one)
      */
     public $moderatorallocation;
 
@@ -337,7 +337,7 @@ class submission extends table_base implements \renderable {
      */
     public function submit_plagiarism($type = null) {
 
-        global $CFG;
+        global $CFG, $USER;
 
         if (empty($CFG->enableplagiarism)) {
             return;
@@ -345,19 +345,20 @@ class submission extends table_base implements \renderable {
 
         $fs = get_file_storage();
         $files = $fs->get_area_files($this->get_context_id(), 'mod_coursework', 'submission',
-                                     $this->id, "id", false);
+            $this->id, "id", false);
 
 
         $params = array(
             'context' => \context_module::instance($this->get_coursework()->get_course_module()->id),
             'courseid' => $this->get_course_id(),
             'objectid' => $this->id,
+            'relateduserid' => $this->get_author_id(),
+            'userid' => $USER->id,
             'other' => array(
                 'content' => '',
                 'pathnamehashes' => array_keys($files)
             )
         );
-
 
 
         $event = \mod_coursework\event\assessable_uploaded::create($params);
@@ -674,7 +675,7 @@ class submission extends table_base implements \renderable {
         }
 
         // All feedbacks in.
-        if ($maxfeedbacksreached && !$this->editable_feedbacks_exist()) {
+        if ($maxfeedbacksreached && !$this->editable_feedbacks_exist() && !$this->editable_final_feedback_exist()) {
             return self::FULLY_GRADED;
         }
 
@@ -913,6 +914,9 @@ class submission extends table_base implements \renderable {
                                      get_string('statusfinalgradedsingle', 'coursework'),
                                      array('class' => 'highlight'));
                 $statustext = $this->has_multiple_markers() && $this->sampled_feedback_exists() ? $spanfinalgraded : $spanfinalgradedsingle;
+                if($this->editable_final_feedback_exist()){
+                    $statustext .= "<br>". get_string('finalgradestilleditable', 'coursework');
+                }
                 break;
 
             case submission::PUBLISHED:
@@ -992,7 +996,8 @@ class submission extends table_base implements \renderable {
              * @var group $group
              */
             $group = $this->get_allocatable();
-            $allocatables = $group->get_members($this->coursework->get_context());
+            $cm = $this->coursework->get_course_module();
+            $allocatables = $group->get_members($this->coursework->get_context(), $cm);
         } else if (!$this->get_coursework()->is_configured_to_have_group_submissions() && $this->allocatabletype == 'user') {
             $allocatables = array($this->get_allocatable());
         } // If neither, the settings have been changed when they shouldn't have been.
@@ -1006,7 +1011,7 @@ class submission extends table_base implements \renderable {
     public function ready_to_publish() {
 
         $grade_judge = new grade_judge($this->get_coursework());
-        if($grade_judge->has_feedback_that_is_promoted_to_gradebook($this)) {
+        if($grade_judge->has_feedback_that_is_promoted_to_gradebook($this) && $this->final_grade_agreed() && !$this->editable_final_feedback_exist()) {
             return true;
         }
 
@@ -1374,10 +1379,101 @@ class submission extends table_base implements \renderable {
 
 
     /**
-     * Tells us whether any of the feedback for this submission are editable
+     * Tells us whether any initial feedbacks for this submission are editable
+     * This is only for double marked courseworks
      *
      */
     public function editable_feedbacks_exist() {
+
+        global $DB;
+
+        $this->get_coursework()->get_grade_editing_time();
+        $params = array('submissionid'=>$this->id);
+        $extrasql = "";
+
+
+        if($this->get_coursework()->get_grade_editing_time() != 0){
+            $extrasql = " AND ((   cf.timecreated + c.gradeeditingtime > :time
+                          AND    cf.finalised = 1) OR cf.finalised = 0)";
+            $params['time'] = time();
+        } else{
+            $extrasql = "  AND    cf.finalised = 0";
+        }
+
+
+        $sql    =   "
+                    SELECT  *
+                    FROM 	{coursework} c,
+					        {coursework_submissions} cs,
+					        {coursework_feedbacks} cf
+			         WHERE 	c.id = cs.courseworkid
+			         AND	cs.id = cf.submissionid
+			         AND	c.numberofmarkers > 1
+			         AND 	cs.finalised = 1			      
+			         AND	cf.stage_identifier NOT LIKE 'final_agreed%'
+			         AND	cs.id = :submissionid
+			 
+			         
+			         $extrasql
+			         
+        ";
+
+        $editablefeedbacks  =   $DB->get_records_sql($sql, $params);
+
+        return (empty($editablefeedbacks))  ?   false : $editablefeedbacks;
+    }
+
+
+    /**
+     * Tells us whether any final feedback for this submission is editable
+     *
+     */
+    public function editable_final_feedback_exist() {
+
+        global $DB;
+
+        $this->get_coursework()->get_grade_editing_time();
+        $params = array('submissionid'=>$this->id);
+        $extrasql = "";
+
+
+        if($this->get_coursework()->get_grade_editing_time() != 0){
+            $extrasql = " AND ((   cf.timecreated + c.gradeeditingtime > :time
+                          AND    cf.finalised = 1) OR cf.finalised = 0)";
+            $params['time'] = time();
+        } else {
+            $extrasql = "  AND    cf.finalised = 0";
+        }
+        if (($this->get_coursework()->has_multiple_markers() && !$this->get_coursework()->sampling_enabled())
+            || ($this->get_coursework()->sampling_enabled()  && $this->sampled_feedback_exists())){
+            $extrasql .= " AND	cf.stage_identifier LIKE 'final_agreed%'";
+        }
+
+
+        $sql    =   "
+                    SELECT  *
+                    FROM    {coursework} c,	
+                            {coursework_submissions} cs,
+					        {coursework_feedbacks} cf
+			         WHERE  c.id = cs.courseworkid
+			         AND	cs.id = cf.submissionid
+			         AND 	cs.finalised = 1
+			         AND	cs.id = :submissionid
+			      			         
+			         $extrasql
+			         
+        ";
+
+        $editablefinalfeedback  =   $DB->get_record_sql($sql, $params);
+
+        return (empty($editablefinalfeedback))  ?   false : $editablefinalfeedback;
+    }
+
+    /**
+     * Tells us whether any of the feedback for this submission are editable
+     *
+     */
+    public function final_draft_feedbacks_exist() {
 
         global $DB;
 
@@ -1391,7 +1487,7 @@ class submission extends table_base implements \renderable {
 			         WHERE 	c.id = cs.courseworkid
 			         AND	cs.id = cf.submissionid
 			         AND	c.numberofmarkers > 1
-			         AND 	finalised = 1
+			         AND 	cs.finalised = 1
 			         AND	c.gradeeditingtime != 0
 			         AND	cf.stage_identifier NOT LIKE 'final_agreed%'
 			         AND	cs.id = :submissionid
@@ -1402,7 +1498,6 @@ class submission extends table_base implements \renderable {
 
         return (empty($editablefeedbacks))  ?   false : $editablefeedbacks;
     }
-
 
 /*
  * Determines whether the current user is able to add a turnitin grademark to this submission

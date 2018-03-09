@@ -110,15 +110,15 @@ class cron {
 
                 } else if ($deadline > time()) { // coursework or personal deadline hasn't passed
                     // check if 1st reminder is due to be sent but has not been sent yet
-                    if ($coursework->due_to_send_first_reminders($coursework->deadline) && $student->has_not_been_sent_reminder($coursework, 1)) {
-                            $student->deadline = $coursework->deadline;
+                    if ($coursework->due_to_send_first_reminders($deadline) && $student->has_not_been_sent_reminder($coursework, 1)) {
+                            $student->deadline = $deadline;
                             $student->coursework_id = $coursework->id;
                             $student->nextremindernumber = 1;
                             $userswhoneedreminding[$student->id().'_'.$coursework->id] = $student;
 
                         // check if 2nd reminder is due to be sent but has not been sent yet
-                    } else if ($coursework->due_to_send_second_reminders($coursework->deadline) && $student->has_not_been_sent_reminder($coursework, 2)) {
-                            $student->deadline = $coursework->deadline;
+                    } else if ($coursework->due_to_send_second_reminders($deadline) && $student->has_not_been_sent_reminder($coursework, 2)) {
+                            $student->deadline = $deadline;
                             $student->coursework_id = $coursework->id;
                             $student->nextremindernumber = 2;
                             $userswhoneedreminding[$student->id().'_'.$coursework->id] = $student;

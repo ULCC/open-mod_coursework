@@ -173,6 +173,18 @@ if ($ADMIN->fulltree) {
                                                                                     get_string('maximum_extension_deadline_desc', 'coursework'),
                                                                                     18, PARAM_INT, 2));
 
+   // Default per page
+
+    $options    =   array('3'=>'3', '10'=>'10', '20'=>'20', '30'=>'30', '40'=>'40', '50'=>'50', '100'=>'100');
+
+
+    $grading_page_header = new admin_setting_heading('grading_page_header', get_string('grading_page', 'mod_coursework'),'');
+    $settings->add($grading_page_header);
+
+    $per_page =  get_string('per_page', 'coursework');
+    $per_page_description = get_string('per_page_desc', 'coursework');
+    $settings->add(new admin_setting_configselect('coursework_per_page', $per_page, $per_page_description, '10', $options));
+
     //automatic agreement delay
 
     $options    =   array('0'=>get_string('disabled', 'mod_coursework'));

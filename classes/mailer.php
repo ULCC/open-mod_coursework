@@ -57,7 +57,7 @@ class mailer {
         $eventdata = new \core\message\message();
         $eventdata->component = 'mod_coursework';
         $eventdata->name = 'submission_receipt';
-        $eventdata->userfrom = $user->get_raw_record();
+        $eventdata->userfrom =  \core_user::get_noreply_user();
         $eventdata->userto = $user->get_raw_record();
         $eventdata->subject = $subject;
         $eventdata->fullmessage = $text_body;
@@ -135,7 +135,7 @@ class mailer {
             $eventdata =  new \core\message\message();
             $eventdata->component = 'mod_coursework';
             $eventdata->name = 'feedback_released';
-            $eventdata->userfrom = $student->get_raw_record();
+            $eventdata->userfrom = \core_user::get_noreply_user();
             $eventdata->userto = $student->get_raw_record();
             $eventdata->subject = $subject;
             $eventdata->fullmessage = $text_body;
@@ -164,6 +164,7 @@ class mailer {
 
         $email_data = new \stdClass();
         $email_data->coursework_name = $this->coursework->name;
+        $email_data->coursework_name_with_link = \html_writer::link($CFG->wwwroot . '/mod/coursework/view.php?id=' . $this->coursework->get_coursemodule_id(), $this->coursework->name);
         $email_data->deadline = $user->deadline;
         $email_data->human_deadline = userdate($user->deadline,'%a, %d %b %Y, %H:%M');
 
@@ -188,7 +189,7 @@ class mailer {
         $eventdata =  new \core\message\message();
         $eventdata->component = 'mod_coursework';
         $eventdata->name = 'student_deadline_reminder';
-        $eventdata->userfrom = $student->get_raw_record();
+        $eventdata->userfrom = \core_user::get_noreply_user();
         $eventdata->userto = $student->get_raw_record();
         $eventdata->subject = $subject;
         $eventdata->fullmessage = $text_body;
@@ -223,7 +224,7 @@ class mailer {
         $eventdata =  new \core\message\message();
         $eventdata->component = 'mod_coursework';
         $eventdata->name = 'coursework_submission';
-        $eventdata->userfrom = $userstonotify->get_raw_record();
+        $eventdata->userfrom = \core_user::get_noreply_user();
         $eventdata->userto = $userstonotify->get_raw_record();
         $eventdata->subject = $subject;
         $eventdata->fullmessage = $text_body;

@@ -41,6 +41,21 @@ Current Coursework plugin includes following features as well as features added 
 
 Releases 
 =================
+**March 2018**
+
+* general bug fixes
+* bug fix to respect Moodle "Restrict Access" for individual students and groups
+* bug fix to encode % sign properly for feedback files which was causing "Bad Request" server error
+
+New features: 
+
+* moderation agreement for single marked coursework where moderator can agree/disagree with assessor mark
+* new 'Save as draft' button for assessors feedbacks
+* pagination on the Allocation page
+* pin/unpin all assessors on the Allocation page
+* global default for view per page
+
+
 **June 2017**
 
 * compatibility with Moodle 3.2

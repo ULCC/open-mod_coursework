@@ -97,6 +97,10 @@ class processor {
                     $clean_data[$allocatable_id][$stage->identifier()] = $stage_data;
                 }
             }
+           /* if (array_key_exists('moderator', $datarrays)) {
+                $moderator_data = $datarrays['moderator'];
+                $clean_data[$allocatable_id]['moderator'] = $moderator_data;
+            }*/
         }
         return $clean_data;
     }

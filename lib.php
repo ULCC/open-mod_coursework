@@ -637,7 +637,9 @@ function coursework_extend_settings_navigation(settings_navigation $settings, na
         ($coursework->allocation_enabled() || $coursework->sampling_enabled())) {
 
         $link = new moodle_url('/mod/coursework/actions/allocate.php', array('id' => $cm->id));
-        $navref->add(get_string('allocateassessorsandmoderators', 'mod_coursework'), $link, navigation_node::TYPE_SETTING);
+        $lang_str = ($coursework->moderation_agreement_enabled())? 'allocateassessorsandmoderators':'allocateassessors';
+        $navref->add(get_string($lang_str, 'mod_coursework'), $link, navigation_node::TYPE_SETTING);
+
     }
     
     // Link to personal deadlines screen
@@ -656,22 +658,14 @@ function coursework_extend_settings_navigation(settings_navigation $settings, na
  * @return bool
  */
 function coursework_role_assigned_event_handler($roleassignment) {
-
+    global $DB;
 
 //    return true; // Until we fix the auto allocator. The stuff below causes an infinite loop.
 
     $courseworkids = coursework_get_coursework_ids_from_context_id($roleassignment->contextid);
 
     foreach ($courseworkids as $courseworkid) {
-        $coursework = coursework::find($courseworkid);
-        if (empty($coursework)) {
-            continue;
-        }
-
-        $cache = \cache::make('mod_coursework', 'courseworkdata');
-        $cache->set($coursework->id()."_teachers", '');
-        $allocator = new \mod_coursework\allocation\auto_allocator($coursework);
-        $allocator->process_allocations();
+        $DB->set_field('coursework','processenrol',1,array('id'=>$courseworkid));
     }
 
     return true;
@@ -687,19 +681,12 @@ function coursework_role_assigned_event_handler($roleassignment) {
  */
 function coursework_role_unassigned_event_handler($roleassignment) {
 
+    global $DB;
+
     $courseworkids = coursework_get_coursework_ids_from_context_id($roleassignment->contextid);
 
     foreach ($courseworkids as $courseworkid) {
-
-        $coursework = coursework::find($courseworkid);
-        if (empty($coursework)) {
-            continue;
-        }
-
-        $allocator = new \mod_coursework\allocation\auto_allocator($coursework);
-        $allocator->process_allocations();
-
-
+        $DB->set_field('coursework','processunenrol',1,array('id'=>$courseworkid));
     }
 
     return true;

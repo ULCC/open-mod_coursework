@@ -274,6 +274,23 @@ $capabilities = array(
             'manager' => CAP_ALLOW
         )
     ),
-    
+
+    'mod/coursework:moderate' => array(
+        'riskbitmask' => RISK_PERSONAL | RISK_SPAM,
+        'captype' => 'write',
+        'contextlevel' => CONTEXT_MODULE,
+        'legacy' => array(
+            'manager' => CAP_ALLOW
+        )
+    ),
+
+    'mod/coursework:receivesubmissionnotifications' => array(
+        'riskbitmask' => RISK_PERSONAL | RISK_SPAM,
+        'captype' => 'write',
+        'contextlevel' => CONTEXT_MODULE,
+        'legacy' => array(
+            'manager' => CAP_ALLOW
+        )
+    ),
 
 );

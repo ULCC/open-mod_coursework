@@ -78,17 +78,17 @@ class mod_coursework_behat_student_page extends mod_coursework_behat_page_base {
     }
 
     public function click_on_the_edit_submission_button() {
-        $locator = "//div[@class='editsubmissionbutton']//input[@type='submit']";
-        $this->pressButtonXpath($locator);
+       $locator = "//div[@class='editsubmissionbutton']";
+       $this->pressButtonXpath($locator);
     }
 
     public function click_on_the_finalise_submission_button() {
-        $locator = "//div[@class='finalisesubmissionbutton']//input[@type='submit']";
+        $locator = "//div[@class='finalisesubmissionbutton']";
         $this->pressButtonXpath($locator);
     }
 
     public function click_on_the_new_submission_button() {
-        $locator = "//div[@class='newsubmissionbutton']//input[@type='submit']";
+        $locator = "//div[@class='newsubmissionbutton']";
         $this->pressButtonXpath($locator);
     }
 
@@ -98,7 +98,7 @@ class mod_coursework_behat_student_page extends mod_coursework_behat_page_base {
     }
 
     public function click_on_the_save_submission_button() {
-        $locator = "//div[@class='newsubmissionbutton']//input[@type='submit']";
+        $locator = "//div[@class='newsubmissionbutton']";
         $this->pressButtonXpath($locator);
     }
 }

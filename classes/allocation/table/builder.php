@@ -91,6 +91,70 @@ class builder {
 
     }
 
+
+    /**
+     * Counts the total number of students that the current user can see.
+     *
+     * @return int
+     */
+    public function get_participant_count() {
+
+        if (!isset($this->totalcount)) {
+            $this->get_table_rows_for_page();
+        }
+        return $this->totalcount;
+    }
+
+    /**
+     *
+     */
+    public function get_table_rows_for_page() {
+
+        $allocatables = $this->get_coursework()->get_allocatables();
+
+        $rows = array();
+        foreach ($allocatables as $allocatable) {
+            $rows[] = new row_builder($this, $allocatable);
+        }
+
+
+        // Sort the rows.
+        $sorting = new mod_coursework\grading_report($this->options, $this->coursework);
+        $method_name = 'sort_by_' . $this->options['sortby'];
+        if (method_exists($sorting, $method_name)) {
+            usort($rows,
+                array($sorting,
+                    $method_name));
+        }
+
+        // Now, we remove the ones who should not be visible on this page. Must happen AFTER the sort!
+        // Rather than sort in SQL, we sort here so we can use complex permissions stuff.
+        // Further to the above this could have been carried out in the database (if it proves to be slow
+        // I will change it) but for now in the name of consistency I will carry out pagination in the code
+        // Page starts at 0!
+        $start = ($this->options['page']) * $this->options['perpage']; // Will start at 0.
+        $end = ($this->options['page'] + 1) * $this->options['perpage']; // Take care of overlap: 0-10, 10-20, 20-30.
+
+        $end    =   (empty($end))  ?  count($rows) :   $end;
+        $counter = 0; // Begin from the first one that the user could see.
+        foreach ($rows as $allocatable_id => $row) {
+
+            $counter++;
+
+            if ($counter <= $start || $counter > $end) { // Taking care not to include the same ones in two pages.
+                unset($rows[$allocatable_id]);
+            }
+        }
+
+        $this->totalrows    =   $rows;
+        $this->totalcount   =   $counter;
+
+
+        return $this->totalrows;
+
+    }
+
+
     /**
      * Getter for the coursework instance
      *
@@ -128,5 +192,31 @@ class builder {
             return new group_cell($items);
         }
         return new user_cell($items);
+    }
+
+    public function get_hidden_elements()   {
+        global $SESSION;
+
+        $elements   =   '';
+
+        $cm     =   $this->coursework->get_course_module();
+
+        if  (isset($SESSION->coursework_allocationsessions[$cm->id]))  {
+
+            foreach($SESSION->coursework_allocationsessions[$cm->id] as $name   =>  $val)   {
+
+                if(!is_array($val))   {
+
+                    $elements   .=  "<input type='hidden' name='$name'   value='$val'> ";
+
+                }
+
+            }
+
+        }
+
+        return  $elements;
+
+
     }
 }

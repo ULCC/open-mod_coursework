@@ -94,9 +94,9 @@ if (isset($SESSION->perpage[$course_module_id]) && optional_param('per_page', 0,
     $SESSION->page[$course_module_id] = $page;
 }
 
-// If a session variable holding perpage preference for the specific coursework is not set, set default value (10).
+// If a session variable holding perpage preference for the specific coursework is not set, set default value (grab default value from global setting).
 if (!(isset($SESSION->perpage[$course_module_id]))) {
-    $SESSION->perpage[$course_module_id] = optional_param('per_page', 10, PARAM_INT);
+    $SESSION->perpage[$course_module_id] = optional_param('per_page', $CFG->coursework_per_page, PARAM_INT);
     $perpage = $SESSION->perpage[$course_module_id];
 } else {
     $perpage = optional_param('per_page', $SESSION->perpage[$course_module_id], PARAM_INT);
@@ -265,6 +265,10 @@ if ($export_grades){
         $csv_cells[] = 'extensionextrainfo';
     }
     $csv_cells[] = 'stages';
+
+    if ($coursework->moderation_agreement_enabled()){
+        $csv_cells[] = 'moderationagreement';
+    }
     $csv_cells[] = 'finalgrade';
 
 

@@ -2311,6 +2311,121 @@ function xmldb_coursework_upgrade($oldversion) {
     }
 
 
+
+    if ($oldversion < 2017052304) {
+
+        // Changing the default of field automaticagreementstrategy on table coursework
+        $table = new xmldb_table('coursework');
+        $field = new xmldb_field('automaticagreementstrategy', XMLDB_TYPE_CHAR, '255', null, XMLDB_NOTNULL, false, 'none');
+
+
+        // Launch change of default for field automaticagreementstrategy.
+        $dbman->change_field_default($table, $field);
+
+
+        // again update default value of automaticagreementstrategy field from NULL to none
+        $allcourseworks = $DB->get_records('coursework', array('automaticagreementstrategy' => 'NULL')); // get all courseworks with automaticagreementstrategy set to NULL
+        foreach ($allcourseworks as $coursework) {
+            $coursework->automaticagreementstrategy = 'none';
+            $DB->update_record('coursework', $coursework);
+        }
+
+        // Coursework savepoint reached.
+        upgrade_mod_savepoint(true, 2017052304, 'coursework');
+    }
+
+
+    if ($oldversion < 2017091400) {
+
+        $table = new xmldb_table('coursework');
+        $upgradefield = new xmldb_field('moderationagreementenabled', XMLDB_TYPE_INTEGER, '1', true, XMLDB_NOTNULL, null, '0', null);
+
+        if (!$dbman->field_exists($table, $upgradefield)) {
+            $dbman->add_field($table, $upgradefield);
+        }
+
+        // Coursework savepoint reached.
+        upgrade_mod_savepoint(true, 2017091400, 'coursework');
+    }
+
+
+
+    if ($oldversion < 2017100300) {
+
+        // Define table coursework_person_deadlines to be created.
+        $table = new xmldb_table('coursework_mod_agreements');
+
+        // Adding fields to table coursework_person_deadlines.
+        $table->add_field('id', XMLDB_TYPE_INTEGER, '10', null, XMLDB_NOTNULL, XMLDB_SEQUENCE, null);
+        $table->add_field('feedbackid', XMLDB_TYPE_INTEGER, '10', null, XMLDB_NOTNULL, null, '0');
+        $table->add_field('moderatorid', XMLDB_TYPE_INTEGER, '10', null, XMLDB_NOTNULL, null, '0');
+        $table->add_field('agreement', XMLDB_TYPE_CHAR, '100', null, XMLDB_NOTNULL, null, null);
+        $table->add_field('timecreated', XMLDB_TYPE_INTEGER, '10', null, XMLDB_NOTNULL, null, null);
+        $table->add_field('timemodified', XMLDB_TYPE_INTEGER, '10', null, XMLDB_NOTNULL, null, '0');
+        $table->add_field('lasteditedby', XMLDB_TYPE_INTEGER, '10', null, XMLDB_NOTNULL, null, null);
+        $table->add_field('modcomment', XMLDB_TYPE_TEXT, null, null, null, null, null);
+        $table->add_field('modcommentformat', XMLDB_TYPE_INTEGER, '1', null, XMLDB_NOTNULL, null, '1');
+        // Adding keys to table coursework_person_deadlines.
+        $table->add_key('primary', XMLDB_KEY_PRIMARY, array('id'));
+
+        // Conditionally launch create table for coursework_person_deadlines.
+        if (!$dbman->table_exists($table)) {
+            $dbman->create_table($table);
+        }
+
+        // Coursework savepoint reached.
+        upgrade_mod_savepoint(true, 2017100300, 'coursework');
+    }
+
+    if ($oldversion < 2017100501) {
+
+        $table = new xmldb_table('coursework');
+        $upgradefield = new xmldb_field('draftfeedbackenabled', XMLDB_TYPE_INTEGER, '1', true, XMLDB_NOTNULL, null, '0', null);
+
+        if (!$dbman->field_exists($table, $upgradefield)) {
+            $dbman->add_field($table, $upgradefield);
+        }
+
+        $table = new xmldb_table('coursework_feedbacks');
+        $upgradefield = new xmldb_field('finalised', XMLDB_TYPE_INTEGER, '1', true, XMLDB_NOTNULL, null, '0', null);
+
+        if (!$dbman->field_exists($table, $upgradefield)) {
+            $dbman->add_field($table, $upgradefield);
+        }
+
+        // Update all old feedbacks to be finalised
+        $allfeedbacks = $DB->get_records('coursework_feedbacks');
+        foreach ($allfeedbacks as $feedback) {
+            $feedback->finalised = 1;
+            $DB->update_record('coursework_feedbacks', $feedback);
+        }
+
+        // Coursework savepoint reached.
+        upgrade_mod_savepoint(true, 2017100501, 'coursework');
+    }
+
+
+    if ($oldversion < 2018021501) {
+
+        $table = new xmldb_table('coursework');
+        $upgradefield = new xmldb_field('processunenrol', XMLDB_TYPE_INTEGER, '1', true, XMLDB_NOTNULL, null, '0', null);
+
+        if (!$dbman->field_exists($table, $upgradefield)) {
+            $dbman->add_field($table, $upgradefield);
+        }
+
+        $upgradefield = new xmldb_field('processenrol', XMLDB_TYPE_INTEGER, '1', true, XMLDB_NOTNULL, null, '0', null);
+
+        if (!$dbman->field_exists($table, $upgradefield)) {
+            $dbman->add_field($table, $upgradefield);
+        }
+
+        // Coursework savepoint reached.
+        upgrade_mod_savepoint(true, 2018021501, 'coursework');
+
+    }
+
+
     // Always needs to return true.
     return true;
 }

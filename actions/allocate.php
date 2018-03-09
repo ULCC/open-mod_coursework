@@ -48,10 +48,33 @@ $assessorallocationstrategy = optional_param('assessorallocationstrategy', false
 $moderationruletype = optional_param('addmodsetruletype', 0, PARAM_ALPHAEXT);
 $deletemodsetrule = optional_param('delete-mod-set-rule', array(), PARAM_RAW) ;
 
+// options used for pagination
+// If a session variable holding page preference for the specific coursework is not set, set default value (0).
+if (isset($SESSION->allocate_perpage[$coursemoduleid]) && (isset($SESSION->perpage[$coursemoduleid]) && optional_param('per_page', 0, PARAM_INT) != $SESSION->perpage[$coursemoduleid])
+    && optional_param('per_page', 0, PARAM_INT) != 0){ // prevent blank pages if not in correct page
+    $page = 0;
+    $SESSION->allocate_page[$coursemoduleid] = $page;
+} else if (!(isset($SESSION->allocate_page[$coursemoduleid]))) {
+    $SESSION->allocate_page[$coursemoduleid] = optional_param('page', 0, PARAM_INT);
+    $page = $SESSION->allocate_page[$coursemoduleid];
+} else {
+    $page = optional_param('page', $SESSION->allocate_page[$coursemoduleid], PARAM_INT);
+    $SESSION->allocate_page[$coursemoduleid] = $page;
+}
+
+// If a session variable holding perpage preference for the specific coursework is not set, set default value (10).
+if (!(isset($SESSION->allocate_perpage[$coursemoduleid]))) {
+    $SESSION->allocate_perpage[$coursemoduleid] = optional_param('per_page', $CFG->coursework_per_page, PARAM_INT);
+    $perpage = $SESSION->allocate_perpage[$coursemoduleid];
+} else {
+    $perpage = optional_param('per_page', $SESSION->allocate_perpage[$coursemoduleid], PARAM_INT);
+    $SESSION->allocate_perpage[$coursemoduleid] = $perpage;
+}
+
 // SQL sort for allocation table.
 $sortby = optional_param('sortby', '', PARAM_ALPHA);
 $sorthow = optional_param('sorthow', '', PARAM_ALPHA);
-$options = compact('sortby', 'sorthow');
+$options = compact('sortby', 'sorthow','perpage','page');
 
 // $_POST['allocatables'] comes as array of arrays which is not supported by optional_param_array, however we clean this later in process_data() function
 $formdataarray = isset($_POST['allocatables']) ? $_POST['allocatables'] : array();
@@ -69,6 +92,8 @@ $PAGE->set_heading($title);
 
 $PAGE->requires->jquery();
 
+$PAGE->requires->js('/mod/coursework/loadingoverlay.min.js');
+
 // Will set off the function that adds listeners for onclick/onchange etc.
 $jsmodule = array(
     'name' => 'mod_coursework',
@@ -77,16 +102,18 @@ $jsmodule = array(
                         'node-base')
 );
 $PAGE->requires->js_init_call('M.mod_coursework.init_allocate_page',
-                              array(),
+                              array('wwwroot'=>$CFG->wwwroot,'coursemoduleid'=>$coursemoduleid),
                               false,
                               $jsmodule);
 
 $PAGE->requires->string_for_js('sameassessorerror', 'coursework');
 
+
+
 $allocationsmanager = $coursework->get_allocation_manager();
 $allocationtable = new mod_coursework\allocation\table\builder($coursework, $options);
 $allocationtable = new mod_coursework_allocation_table($allocationtable);
-
+$pageurl    =   $PAGE->url;
 
 // 1. Save the rules and settings from the config bits.
 
@@ -134,8 +161,7 @@ if ($formsavebutton) {
 
 
 // 3. Process the auto allocations to fill in the gaps.
-$allocator = new \mod_coursework\allocation\auto_allocator($coursework);
-$allocator->process_allocations();
+
 
 
 
@@ -210,9 +236,11 @@ echo html_writer::end_tag('div');
 
 
 echo html_writer::tag('h3', get_string('assessormoderatorgrades', 'mod_coursework'));
+echo html_writer::tag('div', get_string('pininfo', 'mod_coursework'), array('class'=>'pininfo'));
 
 // Start the form with save button.
-/*$attributes = array('name' => 'save',
+/*
+$attributes = array('name' => 'save',
                     'type' => 'submit',
                     'id' => 'save_manual_allocations_1',
                     'value' => get_string('saveeverything', 'mod_coursework'));
@@ -221,14 +249,8 @@ echo $OUTPUT->help_icon('savemanualallocations', 'mod_coursework');
 */
 echo $object_renderer->render($allocationtable);
 
-// End the form with save button.
-$attributes = array('name' => 'save',
-                    'type' => 'submit',
-                    'id' => 'save_manual_allocations_2',
-                    'value' => get_string('save', 'mod_coursework'));
-echo html_writer::empty_tag('input', $attributes);
-//echo $OUTPUT->help_icon('savemanualallocations', 'mod_coursework');
-
 echo html_writer::end_tag('form');
+
+
 
 echo $OUTPUT->footer();

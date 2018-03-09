@@ -42,6 +42,7 @@ use mod_coursework\decorators\coursework_groups_decorator;
 use mod_coursework\grade_judge;
 use mod_coursework\grading_report;
 use mod_coursework\render_helpers\grading_report\cells\grade_for_gradebook_cell;
+use mod_coursework\render_helpers\grading_report\cells\moderation_agreement_cell;
 use mod_coursework\render_helpers\grading_report\cells\single_assessor_feedback_cell;
 use mod_coursework\render_helpers\grading_report\cells\filename_hash_cell;
 use mod_coursework\render_helpers\grading_report\cells\group_cell;
@@ -438,6 +439,14 @@ class coursework extends table_base {
         }
 
         return $this->coursemodule;
+    }
+
+    public function cm_object($coursemodule){
+
+
+        $modinfo = get_fast_modinfo($this->get_course_id());
+        return $this->coursemodule = $modinfo->get_cm($coursemodule->id);
+
     }
 
     /**
@@ -1082,6 +1091,14 @@ class coursework extends table_base {
      */
     public function allocation_enabled() {
         return (bool)$this->allocationenabled;
+    }
+
+    /**
+     * Lets us know if the moderations agreement has been enabled.
+     * @return bool
+     */
+    public function moderation_agreement_enabled() {
+        return (bool)$this->moderationagreementenabled;
     }
 
     /**
@@ -1733,6 +1750,13 @@ class coursework extends table_base {
             );
             $report->add_cell(new single_assessor_feedback_cell($items_with_stage));
         }
+        if($this->moderation_agreement_enabled()){
+            $items_with_stage = array(
+                'stage' => $this->get_moderator_grade_stage(),
+                'coursework' => $this,
+            );
+            $report->add_cell(new moderation_agreement_cell($items_with_stage));
+        }
 
         $report->add_cell(new grade_for_gradebook_cell($cell_items));
 
@@ -1797,6 +1821,14 @@ class coursework extends table_base {
     public function get_students() {
         $users = array();
         $raw_users = get_enrolled_users($this->get_context(), 'mod/coursework:submit');
+
+       // filter students who are restricted from the coursework
+        $cm = $this->get_course_module();
+        $cmobject = $this->cm_object($cm);
+
+        $info = new \core_availability\info_module($cmobject);
+        $raw_users = $info->filter_user_list($raw_users);
+
         foreach ($raw_users as $raw_user) {
             $users[$raw_user->id] = new user($raw_user);
         }
@@ -2015,6 +2047,12 @@ class coursework extends table_base {
                 $identifier = 'final_agreed_1';
                 $this->stages[$identifier] = new final_agreed($this, $identifier);
             }
+
+            if ($this->moderation_agreement_enabled()){
+                $identifier = 'moderator';
+                $this->stages[$identifier] = new moderator($this, $identifier);
+
+            }
         }
 
         return $this->stages;
@@ -2030,6 +2068,9 @@ class coursework extends table_base {
 
         for ($i = 1; $i <= $this->get_max_markers(); $i++) {
             $stages[] = new assessor($this, 'assessor_' . $i);
+        }
+        if ($this->moderation_agreement_enabled()){
+            $stages[] = new moderator($this, 'moderator');
         }
 
         return $stages;
@@ -2054,8 +2095,8 @@ class coursework extends table_base {
      * @return moderator
      */
     private function get_moderator_grade_stage() {
-        if ($this->moderation_enabled()) {
-            return new moderator($this, 'moderator_1');
+        if ($this->moderation_agreement_enabled()) {
+            return new moderator($this, 'moderator');
         }
     }
 
@@ -2117,7 +2158,18 @@ class coursework extends table_base {
 
             $groups = $DB->get_records_sql($sql, $params);
             foreach ($groups as $group) {
-                $allocatables[$group->id] = group::find($group);
+                $group = group::find($group);
+                //find out if members of this group can access this coursework, if group is left without members then remove it
+                $cm = $this->get_course_module();
+                $cmobject = $this->cm_object($cm);
+                /**
+                 * @var group $group
+                 */
+                $members =  $group->get_members($this->get_context(), $cmobject);
+                if (empty($members)){
+                    continue;
+                }
+                $allocatables[$group->id] = $group;
             }
 
         } else {
@@ -2150,7 +2202,11 @@ class coursework extends table_base {
     public function get_stage($identifier) {
 
         if (!array_key_exists($identifier, $this->stages)) {
-            $stage_name = substr($identifier, 0, strripos($identifier, '_'));
+            if ($identifier != 'moderator') {
+                $stage_name = substr($identifier, 0, strripos($identifier, '_'));
+            } else {
+                $stage_name = $identifier;
+            }
             $classname = "\\mod_coursework\\stages\\" . $stage_name;
             return new $classname($this, $identifier);
         }
@@ -2422,7 +2478,7 @@ class coursework extends table_base {
 			         WHERE 	c.id = cs.courseworkid
 			         AND	cs.id = cf.submissionid
 			         AND	c.numberofmarkers > 1
-			         AND 	finalised = 1
+			         AND 	cs.finalised = 1
 			         AND	cf.stage_identifier NOT LIKE 'final_agreed%'
 			         AND    c.id = :courseworkid
 			         AND    c.automaticagreementstrategy != 'null'
@@ -2484,6 +2540,14 @@ class coursework extends table_base {
         return (bool)$this->personaldeadlineenabled;
     }
 
+
+    /**
+     * Lets us know if draft feedback is enabled in the coursework.
+     * @return bool
+     */
+    public function draft_feedback_enabled(){
+        return (bool)$this->draftfeedbackenabled;
+    }
 
 
     /**

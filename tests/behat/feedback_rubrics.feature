@@ -51,11 +51,3 @@ Feature: Adding feedback using the built in Moodle rubrics
         When I visit the coursework page
         And I should see the grade comment on the student page
 
-        @javascript
-    Scenario: If I do not fill in all the rubric fields, I should see a warning
-        Given there is a rubric defined for the coursework
-        Given I visit the coursework page
-        When I click the new single final feedback button for the student
-        And I fill in the rest of the form after the rubric and submit it
-        And I should see "Please choose something for each criterion"
-

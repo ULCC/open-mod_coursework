@@ -7,6 +7,7 @@ table.submissions,
 table.deadlines,
 table.allocations,
 table.grading-details,
+table.moderating-details,
 table.personal-deadline-details{
     width: 100%;
     border-collapse: collapse;
@@ -17,12 +18,14 @@ table.deadlines td,
 table.allocations td,
 table.personal_deadline td,
 table.grading-details td,
+table.moderating-details td,
 table.personal-deadline-details td,
 table.submissions th,
 table.deadlines th,
 table.allocations th,
 table.personal_deadline th,
 table.grading-details th,
+table.moderating-details th,
 table.personal-deadline-details th{
     padding: 1em;
 }
@@ -30,6 +33,7 @@ table.submissions th,
 table.allocations th,
 table.personal_deadline th,
 table.grading-details th,
+table.moderating-details th,
 table.personal-deadline-details th{
     background: #e5eef6 !important;
 }
@@ -150,6 +154,7 @@ table.submissions td.assessors > table.assessors td {
 .new_submission,
 .new_feedback,
 .new_final_feedback,
+.new_moderation,
 .show_feedback,
 .new_deadline_extension{
     padding:5px 5px 5px 25px;
@@ -175,6 +180,10 @@ table.submissions td.assessors > table.assessors td {
 .new_final_feedback{
      background: #f3f3f3 url([[pix:coursework|add-feedback]]) no-repeat 5px center;
 }
+.new_moderation{
+    background: #f3f3f3 url([[pix:coursework|moderate]]) no-repeat 5px center;
+}
+
 .show_feedback{
     background: #f3f3f3 url([[pix:coursework|view]]) no-repeat 5px center;
 }
@@ -199,6 +208,10 @@ table.submissions td.assessors > table.assessors td {
 }
 .new_final_feedback:hover{
     background: #e6e6e6 url([[pix:coursework|add-feedback]]) no-repeat 5px center;
+    text-decoration:none;
+}
+.new_moderation:hover{
+    background: #e6e6e6 url([[pix:coursework|moderate]]) no-repeat 5px center;
     text-decoration:none;
 }
 .show_feedback:hover{
@@ -487,12 +500,12 @@ table.feedback td.cleft{
 #page-mod-coursework-actions-feedbacks-new .mform{
     padding: 1em !important;
 }
-table.grading-details th, table.personal-deadline-details th,
-table.grading-details td, table.personal-deadline-details, td {
+table.grading-details th, table.moderating-details th table.personal-deadline-details th,
+table.grading-details td, table.moderating-details td, table.personal-deadline-details, td {
     border-bottom: 1px solid #fff;
     padding: .5em;
 }
-table.grading-details th, table.personal-deadline-details th{
+table.grading-details th, table.moderating-details th, table.personal-deadline-details th{
     background: #ccdfee !important;
     width: 150px;
 }
@@ -519,4 +532,18 @@ table.grading-details th, table.personal-deadline-details th{
     border: 1px solid #cc0000;
     color:#cc0000;
     padding: 8px 35px 8px 14px;
+}
+
+#coursework_input_buttons {
+    height:120px;
+    text-align: center;
+}
+
+.coursework_assessor_allocation {
+    vertical-align: middle;
+    top: 50%;
+}
+
+.pininfo{
+    padding: 4px 10px 10px 35px;
 }

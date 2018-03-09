@@ -138,6 +138,7 @@ class feedback_controller extends controller_base {
         $teacherfeedback->ismoderation = $this->params['ismoderation'];
         $teacherfeedback->stage_identifier = $this->params['stage_identifier'];
         $teacherfeedback->lasteditedbyuser = $USER->id;
+        $teacherfeedback->finalised = $this->params['finalised'] ? 1 : 0;
 
         $submission = submission::find($this->params['submissionid']);
         $path_params = array(
@@ -217,6 +218,7 @@ class feedback_controller extends controller_base {
 
         $teacherfeedback = new feedback($this->params['feedbackid']);
         $teacherfeedback->lasteditedbyuser = $USER->id;
+        $teacherfeedback->finalised = $this->params['finalised'] ? 1 : 0;
 
         $ability = new ability(user::find($USER), $this->coursework);
         $ability->require_can('update', $teacherfeedback);

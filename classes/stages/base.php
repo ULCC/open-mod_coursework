@@ -10,6 +10,7 @@ use mod_coursework\allocation\table\cell\processor;
 use mod_coursework\models\allocation;
 use mod_coursework\models\coursework;
 use mod_coursework\models\feedback;
+use mod_coursework\models\moderation;
 use mod_coursework\models\assessment_set_membership;
 use mod_coursework\models\submission;
 use mod_coursework\models\user;
@@ -35,6 +36,12 @@ abstract class base {
      * @var array|null
      */
     protected $allocatables_with_feedback;
+
+    /**
+     * @var array|null
+     */
+    protected $allocatables_with_moderation;
+
 
     /**
      * @param coursework $coursework
@@ -162,6 +169,17 @@ abstract class base {
         return $cell_helper->get_renderable_allocation_table_cell();
     }
 
+
+    /**
+     * @param $allocatable
+     * @return \html_table_cell
+     */
+    public function get_moderation_table_cell($allocatable) {
+        $cell_helper = $this->get_cell_helper($allocatable);
+
+        return $cell_helper->get_renderable_moderation_table_cell();
+    }
+
     /**
      * @param $allocatable
      * @param $teacher
@@ -185,7 +203,25 @@ abstract class base {
      * @return mixed|void
      */
     private function get_next_teacher($allocatable) {
-        return $this->get_allocation_strategy()->next_assessor_from_list($this->get_teachers(), $allocatable);
+
+        // for percentage allocation use only those teachers that have percentage allocated
+        if ($this->coursework->assessorallocationstrategy == 'percentages'){
+            $teachers = $this->get_percentage_allocated_teachers();
+        } else {
+            $teachers = $this->get_teachers();
+        }
+
+        return $this->get_allocation_strategy()->next_assessor_from_list($teachers, $allocatable);
+    }
+
+    /**
+     * Get ids of teachers who have percentage allocated to them
+     * @return array
+     */
+    private function get_percentage_allocated_teachers(){
+        global $DB;
+
+        return $DB->get_records('coursework_allocation_config', array('courseworkid'=>$this->get_coursework_id()),'','assessorid as id');
     }
 
     /**
@@ -275,6 +311,40 @@ abstract class base {
     }
 
     /**
+     * @param $submission
+     * @return bool
+     */
+    public function has_moderation($submission) {
+
+        global $DB;
+        $feedback = $this->get_single_feedback($submission);
+        if ($feedback) {
+
+            $sql = "SELECT *
+                    FROM {coursework_mod_agreements} 
+                    WHERE feedbackid = ?";
+            return $DB->record_exists_sql($sql, array($feedback->id));
+        } else {
+            return false;
+        }
+    }
+
+
+    /**
+     * @param $moderation
+     * @return bool|moderation
+     */
+    public function get_moderation($submission) {
+        $feedback = $this->get_single_feedback($submission);
+        if ($feedback) {
+            $moderation_params = array('feedbackid' => $feedback->id);
+            return moderation::find($moderation_params);
+        } else {
+            return false;
+        }
+    }
+
+    /**
      * @param allocatable $allocatable
      * @return bool|feedback
      */
@@ -290,6 +360,16 @@ abstract class base {
             return $this->get_feedback_for_submission($submission);
         }
         return false;
+    }
+
+    /**
+     * @param $submission
+     * @return feedback|bool
+     */
+    public function get_single_feedback($submission){
+        $feedback_params = array('submissionid' => $submission->id, 'stage_identifier'=> 'assessor_1');
+
+       return feedback::find($feedback_params);
     }
 
     /**
@@ -311,6 +391,25 @@ abstract class base {
 
         return in_array($allocatable->id, $this->allocatables_with_allocations);
     }
+
+
+    /**
+     * Check if current marking stage has any allocation
+     *
+     * @return bool
+     */
+    public function stage_has_allocation(){
+        global $DB;
+
+        $sql = "SELECT allocatableid
+                      FROM {coursework_allocation_pairs} a
+                     WHERE a.courseworkid = :courseworkid
+                       AND a.stage_identifier = :stageidentifier
+                    ";
+        return  $DB->record_exists_sql($sql, array('courseworkid' => $this->coursework->id(),
+                                                   'stageidentifier' => $this->stage_identifier));
+    }
+
 
     /**
      * @param $allocatable
@@ -459,6 +558,16 @@ abstract class base {
     }
 
     /**
+     * @param $assessor
+     * @return bool
+     */
+    public function user_is_moderator($moderator) {
+        $enrolled = is_enrolled($this->coursework->get_course_context(), $moderator, 'mod/coursework:moderate');
+        return $enrolled || is_primary_admin($moderator->id);
+    }
+
+
+    /**
      * Check if a user has any allocation in this stage
      * @param allocatable $allocatable
      * @return bool
@@ -588,6 +697,18 @@ abstract class base {
     }
 
     /**
+     * @param $feedback
+     * @return moderation|bool
+     */
+    public function get_moderation_for_feedback($feedback) {
+        $moderation_params = array(
+            'feedbackid' => $feedback->id
+        );
+        return moderation::find($moderation_params);
+    }
+
+
+    /**
      * return bool
      */
     public function assessment_set_is_not_empty() {
@@ -624,6 +745,7 @@ abstract class base {
      */
     public function potential_marker_dropdown($allocatable) {
 
+
         // This gets called a lot on the allocations page, but does not change.
 
         if (!isset($this->assessor_dropdown_options)) {
@@ -655,15 +777,44 @@ abstract class base {
 
         $option_for_nothing_chosen_yet = array('' => get_string($identifier, 'mod_coursework'));
 
+
+        $dropdown_name  =   $this->assessor_dropdown_name($allocatable);
+
+        $selected   =   $this->selected_allocation_in_session($dropdown_name);
+
+
         $assessor_dropdown = \html_writer::select($this->assessor_dropdown_options,
-                                                  $this->assessor_dropdown_name($allocatable),
-                                                  '',
+                                                 $dropdown_name,
+                                                 $selected,
                                                   $option_for_nothing_chosen_yet,
                                                   $html_attributes
         );
 
 
         return $assessor_dropdown;
+    }
+
+    /**
+     * @param $allocatable
+     * @return string
+     */
+    public function potential_moderator_dropdown($allocatable) {
+
+        $option_for_nothing_chosen_yet = array('' =>'Choose Moderator');
+        $html_attributes = array(
+            'id' => $this->moderator_dropdown_id($allocatable),
+            'class' => 'moderator_id_dropdown',
+        );
+
+        $dropdown_name  =   $this->assessor_dropdown_name($allocatable);
+
+        $selected   =   $this->selected_allocation_in_session($dropdown_name);
+
+        return  $moderator_dropdown = \html_writer::select($this->potential_moderators_as_options_array(),
+            'allocatables[' . $allocatable->id . '][moderator][assessor_id]',
+            $selected,
+            $option_for_nothing_chosen_yet,
+            $html_attributes);
     }
 
     /**
@@ -676,6 +827,18 @@ abstract class base {
             $options[$marker->id] = $marker->name();
         }
 
+        return $options;
+    }
+
+    /**
+     * @return array
+     */
+    private function potential_moderators_as_options_array() {
+        $potentialmoderators = get_enrolled_users($this->coursework->get_course_context(), 'mod/coursework:moderate');
+        $options = array();
+        foreach ($potentialmoderators as $moderator) {
+            $options[$moderator->id] = fullname($moderator);
+        }
         return $options;
     }
 
@@ -696,6 +859,14 @@ abstract class base {
      */
     private function assessor_dropdown_id($allocatable) {
         return $allocatable->type() . '_' . $allocatable->id() . '_' . $this->identifier();
+    }
+
+    /**
+     * @param allocatable $allocatable
+     * @return string user_2_assessor_1
+     */
+    private function moderator_dropdown_id($allocatable) {
+        return $allocatable->type() . '_' . $allocatable->id() . '_moderator';
     }
 
     /**
@@ -743,4 +914,24 @@ abstract class base {
         return $feedback->timecreated + $this->get_coursework()->get_grade_editing_time() > time();
 
     }
+
+    private function selected_allocation_in_session($dropdownname)     {
+        global  $SESSION;
+
+        $cm =   $this->coursework->get_course_module();
+
+        if (!empty($SESSION->coursework_allocationsessions[$cm->id]))   {
+
+            if (!empty($SESSION->coursework_allocationsessions[$cm->id][$dropdownname]))    {
+                return  $SESSION->coursework_allocationsessions[$cm->id][$dropdownname];
+            }
+
+
+
+        }
+
+        return  '';
+
+    }
+
 }

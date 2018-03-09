@@ -17,17 +17,26 @@
 /**
  * @package    mod
  * @subpackage coursework
- * @copyright  2011 University of London Computer Centre {@link ulcc.ac.uk}
+ * @copyright  2017 University of London Computer Centre {@link ulcc.ac.uk}
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 
-defined('MOODLE_INTERNAL') || die();
+require_once(dirname(__FILE__) . '/../../../../config.php');
 
+global $CFG, $USER;
 
-$plugin->component = 'mod_coursework';
-$plugin->version  = 2018030600;  // If version == 0 then module will not be installed
-$plugin->requires = 2016120500;  // Requires this Moodle version
-$plugin->cron     = 300;        // Period for cron to check this module (secs).
+$submissionid = required_param('submissionid', PARAM_INT);
+$cmid = optional_param('cmid', 0, PARAM_INT);
+$feedbackid = required_param('feedbackid',  PARAM_INT);
+$moderatorid = optional_param('moderatorid', $USER->id, PARAM_INT);
+$stage_identifier = optional_param('stage_identifier', 'uh-oh',  PARAM_RAW);
 
-$plugin->release   = "3.2";
-$plugin->maturity  = MATURITY_STABLE;
+$params = array(
+    'submissionid' => $submissionid,
+    'cmid' => $cmid,
+    'feedbackid' => $feedbackid,
+    'moderatorid' => $moderatorid,
+    'stage_identifier' => $stage_identifier,
+);
+$controller = new mod_coursework\controllers\moderations_controller($params);
+$controller->new_moderation();

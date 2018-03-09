@@ -102,9 +102,11 @@ class multi_marker_feedback_sub_rows implements sub_rows_interface {
                      get_string('assessornotallocated','mod_coursework') : $this->profile_link($feedback_row);
 
 
+
+                $editable = (!$feedback_row->has_feedback() || $feedback_row->get_feedback()->finalised)? '' : '</br>'.get_string('notfinalised', 'coursework');
                  $output_rows .= '
               <td>' . $assessor_details. ' </td>
-              <td class="assessor_feedback_grade">' . $this->comment_for_row($feedback_row, $ability) .$gradedby. '</td >
+              <td class="assessor_feedback_grade">' . $this->comment_for_row($feedback_row, $ability) .$gradedby. $editable.'</td >
               <td >' . $this->date_for_column($feedback_row) . '</td >
             </tr >
             ';

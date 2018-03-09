@@ -181,11 +181,15 @@ class mod_coursework_behat_page_base {
      * @throws ElementNotFoundException
      */
     protected function pressButtonXpath($locator) {
-        $button = $this->getPage()->find('xpath', $locator);
+        // behat generates button type submit whereas code does input
+        $inputtype = $this->getPage()->find('xpath', $locator ."//input[@type='submit']");
+        $buttontype = $this->getPage()->find('xpath',  $locator ."//button[@type='submit']");
+
+        $button = ($inputtype !== null)? $inputtype : $buttontype;// check how element was created and use it to find the button
 
         if (null === $button) {
             throw new ElementNotFoundException(
-                $this->getSession(), 'button', 'xpath', $locator
+                $this->getSession(), 'button', 'xpath', $button->getXpath()
             );
         }
 
