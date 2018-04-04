@@ -888,8 +888,7 @@ class ability extends \mod_coursework\framework\ability {
             'mod_coursework\models\feedback',
             function (feedback $feedback) {
                 $is_creator = $feedback->assessorid == $this->get_user()->id;
-                $stage = $feedback->get_stage();
-                return  $is_creator && ($feedback->get_submission()->editable_feedbacks_exist() || ($feedback->get_submission()->editable_final_feedback_exist() && !$stage->is_initial_assesor_stage()));
+                return  $is_creator && ($feedback->get_submission()->editable_feedbacks_exist() || $feedback->get_submission()->editable_final_feedback_exist());
             });
     }
 
