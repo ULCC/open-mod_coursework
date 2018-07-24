@@ -73,6 +73,7 @@ class processor {
 
         if ($allocation) {
             $allocation->set_assessor($data->get_assessor());
+            $allocation->pin();
         } else {
             $this->make_allocation($data->get_assessor(), $this->get_allocatable());
         }

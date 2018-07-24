@@ -156,6 +156,7 @@ table.submissions td.assessors > table.assessors td {
 .new_final_feedback,
 .new_moderation,
 .show_feedback,
+.show_moderation,
 .new_deadline_extension{
     padding:5px 5px 5px 25px;
     border: 1px solid #b3b3b3 ;
@@ -187,6 +188,9 @@ table.submissions td.assessors > table.assessors td {
 .show_feedback{
     background: #f3f3f3 url([[pix:coursework|view]]) no-repeat 5px center;
 }
+.show_moderation{
+    background: #f3f3f3 url([[pix:coursework|view]]) no-repeat 5px center;
+}
 .new_deadline_extension{
     background: #f3f3f3 url([[pix:coursework|new-deadline]]) no-repeat 5px center;
 }
@@ -215,6 +219,10 @@ table.submissions td.assessors > table.assessors td {
     text-decoration:none;
 }
 .show_feedback:hover{
+    background: #e6e6e6 url([[pix:coursework|view]]) no-repeat 5px center;
+    text-decoration:none;
+}
+.show_moderation:hover{
     background: #e6e6e6 url([[pix:coursework|view]]) no-repeat 5px center;
     text-decoration:none;
 }
@@ -425,23 +433,24 @@ table.personal_deadline td{
     margin: 15px 5px 20px 5px;
 }
 
-/* Student view - Feedback tables */
+/* Student view - Feedback tables
+Moderation table*/
 
-table.feedback{
+table.feedback, table.moderation{
     width: 100%;
     margin-bottom: 1em;
 }
-table.feedback td,
-table.feedback th{
+table.feedback td,table.moderation td,
+table.feedback th, table.moderation th{
     padding:1em;
 }
-table.feedback  th{
+table.feedback  th, table.moderation th{
     border-bottom:3px solid #ddd;
 }
-table.feedback tbody tr:nth-of-type(2n+1) {
+table.feedback tbody tr:nth-of-type(2n+1), table.moderation tbody tr:nth-of-type(2n+1){
     background: #f9f9f9 ;
 }
-table.feedback td.cleft{
+table.feedback td.cleft, table.moderation td.cleft{
     width: 40%;
 }
 /*  Groupings */

@@ -126,6 +126,10 @@ class ability extends \mod_coursework\framework\ability {
         // edit moderation
         $this->allow_edit_moderation_if_user_created_moderation_and_can_edit();
         $this->allow_edit_moderation_if_user_is_allocated_to_moderate();
+        $this->allow_edit_moderation_if_user_can_administer_grades();
+
+        //show moderation
+        $this->allow_show_moderation_if_user_can_view_grades_at_all_times();
 
 
 
@@ -455,7 +459,12 @@ class ability extends \mod_coursework\framework\ability {
         $this->prevent('edit',
             'mod_coursework\models\submission',
             function (submission $submission) {
-                $deadline_passed = $submission->get_coursework()->deadline_has_passed();
+                // take into account courseworks with personal deadlines
+                if ($submission->get_coursework()->personal_deadlines_enabled()){
+                    $deadline_passed = ($submission->submission_personal_deadline() < time())? true : false;
+                 } else {
+                     $deadline_passed = $submission->get_coursework()->deadline_has_passed();
+                }
                 $ok_to_submit_late = $submission->get_coursework()->allow_late_submissions();
                 $coursework = $submission->get_coursework();
                 $submitting_allocatable = $coursework->submiting_allocatable_for_student($this->get_user());
@@ -656,6 +665,29 @@ class ability extends \mod_coursework\framework\ability {
                 return  $is_allocated;
             });
     }
+
+    protected function allow_edit_moderation_if_user_can_administer_grades(){
+        $this->allow('edit',
+            'mod_coursework\models\moderation',
+            function (moderation $moderation) {
+                return has_capability('mod/coursework:administergrades',
+                    $moderation->get_coursework()
+                        ->get_context());
+            });
+    }
+
+    protected function allow_show_moderation_if_user_can_view_grades_at_all_times() {
+        $this->allow('show',
+            'mod_coursework\models\moderation',
+            function (moderation $moderation) {
+                return  has_capability('mod/coursework:viewallgradesatalltimes',
+                        $moderation->get_coursework()
+                            ->get_context());
+            });
+    }
+
+
+
 
     protected function prevent_new_feedback_with_no_submission() {
         $this->prevent('new',
@@ -888,7 +920,9 @@ class ability extends \mod_coursework\framework\ability {
             'mod_coursework\models\feedback',
             function (feedback $feedback) {
                 $is_creator = $feedback->assessorid == $this->get_user()->id;
-                return  $is_creator && ($feedback->get_submission()->editable_feedbacks_exist() || $feedback->get_submission()->editable_final_feedback_exist());
+                $stage = $feedback->get_stage();
+                return  $is_creator && ($feedback->get_submission()->editable_feedbacks_exist() || $feedback->get_submission()->editable_final_feedback_exist()
+                        && ((!$feedback->get_coursework()->has_multiple_markers() && $stage->is_initial_assesor_stage() ) || !$stage->is_initial_assesor_stage()));
             });
     }
 

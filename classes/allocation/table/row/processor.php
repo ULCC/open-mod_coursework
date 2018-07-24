@@ -41,7 +41,9 @@ class processor {
         $stages = $this->coursework->marking_stages();
 
         foreach ($stages as $stage) {
-            $stage->process_allocation_form_row_data($this->allocatable, $data);
+            if ($data) {
+                $stage->process_allocation_form_row_data($this->allocatable, $data);
+            }
         }
     }
 

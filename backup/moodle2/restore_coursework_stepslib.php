@@ -103,11 +103,15 @@ class restore_coursework_activity_structure_step extends restore_activity_struct
                                   'manualsrscode'=>''),
                             $data);
 
-        $newitemid = $DB->insert_record('coursework_submissions', $data);
-        $this->set_mapping('coursework_submission',$oldid,$newitemid);
+        if (!$DB->record_exists('coursework_submissions', array('courseworkid'=>$data->courseworkid, 'allocatableid' =>$data->allocatableid, 'allocatabletype' => $data->allocatabletype))) {
 
-        //Tell system how to map the old submission id to its new one.
-        $this->set_mapping('coursework_submission', $oldid, $newitemid, false, null, $this->task->get_old_contextid());
+            $newitemid = $DB->insert_record('coursework_submissions', $data);
+            $this->set_mapping('coursework_submission', $oldid, $newitemid);
+
+            //Tell system how to map the old submission id to its new one.
+            $this->set_mapping('coursework_submission', $oldid, $newitemid, false, null, $this->task->get_old_contextid());
+        }
+
     }
 
     protected function process_coursework_feedback($data)
@@ -490,19 +494,9 @@ class restore_coursework_activity_structure_step extends restore_activity_struct
                 $entry=$DB->get_record('coursework_submissions',
                                        array('id'=>$itemid));
 
-                $basename=\mod_coursework\models\coursework::get_name_hash($this->get_new_parentid('coursework'),
-                                                                           $entry->allocatableid);
-                $basename.='_1';
+                $submission = \mod_coursework\models\submission::find($entry->id);
+                $submission->rename_files(); // use cw function to handle file renaming as submission may have few files
 
-                $oldname=$file->get_filename();
-
-                $suffix='';
-                if(($pos=strrpos($oldname,'.'))!==FALSE)
-                {
-                    $suffix=substr($oldname,$pos);
-                }
-
-                $file->rename($file->get_filepath(),"$basename$suffix");
             }
         }
     }

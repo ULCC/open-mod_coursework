@@ -41,11 +41,18 @@ Current Coursework plugin includes following features as well as features added 
 
 Releases 
 =================
+**July 2018**
+
+* general bug fixes
+
 **March 2018**
 
 * general bug fixes
 * bug fix to respect Moodle "Restrict Access" for individual students and groups
 * bug fix to encode % sign properly for feedback files which was causing "Bad Request" server error
+* added new scheduled tasks to process enrolment/unenrolment allocations when user is enrolled/unenrolled from the course. <br> 
+  This is to make sure the allocation takes place in the background preventing pages freeze. This is set by default to run every 1 hour,<br> 
+  but if you require it more often, change settings in the scheduled tasks 
 
 New features: 
 

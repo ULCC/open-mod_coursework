@@ -4,6 +4,7 @@ use mod_coursework\allocation\manager;
 use mod_coursework\grade_judge;
 use mod_coursework\models\coursework;
 use mod_coursework\models\feedback;
+use mod_coursework\models\moderation;
 use mod_coursework\models\user;
 use mod_coursework\models\moderation_set_rule;
 use mod_coursework\models\submission;
@@ -138,6 +139,87 @@ class mod_coursework_object_renderer extends plugin_renderer_base {
             $table_row->cells['right'] = $right_cell;
             $table->data[] = $table_row;
         }
+
+        $out .= html_writer::table($table);
+
+        return $out;
+    }
+
+
+
+
+    /**
+     * Renders a coursework moderation as a row in a table.
+     *
+     * @param moderation $moderation
+     * @return string
+     */
+    public function render_moderation(moderation $moderation){
+
+
+        $title =
+            get_string('moderationfor', 'coursework', $moderation->get_submission()->get_allocatable_name());
+
+        $out = '';
+        $moderatedby = fullname(user::find($moderation->moderatorid));
+        $lasteditedby = fullname(user::find($moderation->lasteditedby));
+
+        $table = new html_table();
+        $table->attributes['class'] = 'moderation';
+        $table->id = 'moderation'. $moderation->id;
+        $header = new html_table_cell();
+        $header->colspan = 2;
+        $header->text = $title;
+        $table->head[] = $header;
+
+        // Moderated by
+        $table_row = new html_table_row();
+        $left_cell = new html_table_cell();
+        $right_cell = new html_table_cell();
+        $left_cell->text = get_string('moderatedby', 'coursework' );
+        $right_cell->text =  $moderatedby;
+        $right_cell->id = 'moderation_moderatedby';
+
+        $table_row->cells['left'] = $left_cell;
+        $table_row->cells['right'] = $right_cell;
+        $table->data[] = $table_row;
+
+        // Last edited by
+        $table_row = new html_table_row();
+        $left_cell = new html_table_cell();
+        $right_cell = new html_table_cell();
+        $left_cell->text = get_string('lasteditedby', 'coursework');
+        $right_cell->text = $lasteditedby . ' on ' .
+                            userdate($moderation->timemodified, '%a, %d %b %Y, %H:%M');
+        $right_cell->id = 'moderation_lasteditedby';
+
+        $table_row->cells['left'] = $left_cell;
+        $table_row->cells['right'] = $right_cell;
+        $table->data[] = $table_row;
+
+        // Moderation agreement
+        $table_row = new html_table_row();
+        $left_cell = new html_table_cell();
+        $right_cell = new html_table_cell();
+        $left_cell->text = get_string('moderationagreement', 'coursework');
+        $right_cell->text = get_string($moderation->agreement, 'coursework');
+        $right_cell->id = 'moderation_agreement';
+
+        $table_row->cells['left'] = $left_cell;
+        $table_row->cells['right'] = $right_cell;
+        $table->data[] = $table_row;
+
+        // Moderation comment
+        $table_row = new html_table_row();
+        $left_cell = new html_table_cell();
+        $right_cell = new html_table_cell();
+        $left_cell->text = get_string('comment', 'mod_coursework');
+        $right_cell->text = $moderation->modcomment;
+        $right_cell->id = 'moderation_comment';
+
+        $table_row->cells['left'] = $left_cell;
+        $table_row->cells['right'] = $right_cell;
+        $table->data[] = $table_row;
 
         $out .= html_writer::table($table);
 

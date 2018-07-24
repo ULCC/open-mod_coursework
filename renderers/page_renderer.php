@@ -33,6 +33,23 @@ class mod_coursework_page_renderer extends plugin_renderer_base {
     }
 
     /**
+     * @param moderation $moderation
+     */
+    public function show_moderation_page($moderation) {
+        global $OUTPUT;
+
+        $html = '';
+
+        $object_renderer = $this->get_object_renderer();
+        $html .= $object_renderer->render_moderation($moderation);
+
+        echo $OUTPUT->header();
+        echo $html;
+        echo $OUTPUT->footer();
+    }
+
+
+    /**
      * Renders the HTML for the edit page
      *
      * @param feedback $teacher_feedback

@@ -2425,6 +2425,20 @@ function xmldb_coursework_upgrade($oldversion) {
 
     }
 
+    if ($oldversion < 2018042401){
+
+        $table = new xmldb_table('coursework_mod_agreements');
+        $upgradefield = new xmldb_field('lasteditedbyid', XMLDB_TYPE_INTEGER, '10', null, XMLDB_NOTNULL, null, null);
+
+        if ($dbman->field_exists($table, $upgradefield)) {
+
+            $dbman->rename_field($table, $upgradefield, 'lasteditedby', $continue = true, $feedback = true);
+        }
+        // Coursework savepoint reached.
+        upgrade_mod_savepoint(true, 2018042401, 'coursework');
+    }
+
+
 
     // Always needs to return true.
     return true;

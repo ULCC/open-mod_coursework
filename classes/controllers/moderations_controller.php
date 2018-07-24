@@ -176,6 +176,28 @@ class moderations_controller extends controller_base {
     }
 
     /**
+     * Shows the moderation as 'view only'
+     *
+     * @throws \coding_exception
+     * @throws access_denied
+     */
+    protected function show_moderation() {
+        global $PAGE, $USER;
+
+        $urlparams = array('moderationid' => $this->params['moderationid']);
+        $PAGE->set_url('/mod/coursework/actions/moderations/show.php', $urlparams);
+
+        $moderation = new moderation($this->params['moderationid']);
+
+        $ability = new ability(user::find($USER), $this->coursework);
+        $ability->require_can('show', $moderation);
+
+        $renderer = $this->get_page_renderer();
+        $renderer->show_moderation_page($moderation);
+    }
+
+
+    /**
      * Get any feedback-specific stuff.
      */
     protected function prepare_environment() {

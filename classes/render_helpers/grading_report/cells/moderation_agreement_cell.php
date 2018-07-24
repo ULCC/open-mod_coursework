@@ -68,7 +68,7 @@ class moderation_agreement_cell extends cell_base {
                 );
                 // allow moderations if feedback exists
                 $new_moderation = moderation::build($moderation_params);
-                if ($ability->can('new', $new_moderation)) {
+                if ($ability->can('new', $new_moderation) && ($rowobject->get_single_feedback()->finalised || is_siteadmin($USER->id))) {
                     $content .= $this->new_moderation_button($rowobject, user::find($USER));
                     $content .= html_writer::empty_tag('br');
                 }
@@ -82,6 +82,8 @@ class moderation_agreement_cell extends cell_base {
 
             if ($ability->can('edit', $moderation)) { // Edit
                 $content .= $this->edit_moderation_button($rowobject);
+            } else if ($ability->can('show', $moderation)) { // Show
+                $content .= $this->show_moderation_button($rowobject);
             }
 
             $content .= html_writer::empty_tag('br');
@@ -193,5 +195,29 @@ class moderation_agreement_cell extends cell_base {
             null,
             array('id' => $link_id));
 
+    }
+
+    /**
+     * @param $rowobject
+     * @return string
+     */
+
+    private function show_moderation_button($rowobject) {
+        global $OUTPUT;
+
+        $feedback = $rowobject->get_submission()->get_assessor_feedback_by_stage('assessor_1');
+        $moderation_params = array(
+            'moderation' => $this->stage->get_moderation_for_feedback($feedback)
+        );
+
+        $linktitle = get_string('viewmoderation', 'mod_coursework');
+        $link_id = "show_moderation_" . $rowobject->get_coursework()
+                ->get_allocatable_identifier_hash($rowobject->get_allocatable());
+        $link = $this->get_router()->get_path('show moderation', $moderation_params);
+
+        return $OUTPUT->action_link($link,
+                                    $linktitle,
+                                null,
+                                      array('class'=>'show_moderation','id' => $link_id));
     }
 }

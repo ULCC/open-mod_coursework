@@ -1130,7 +1130,7 @@ class submission extends table_base implements \renderable {
         return $submission_files;
     }
 
-    private function rename_files() {
+    public function rename_files() {
         $counter = 1;
         $stored_files = $this->get_files();
         foreach ($stored_files as $file) {
