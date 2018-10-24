@@ -160,7 +160,7 @@ Please report bugs using the GitHub issues tab. When reporting a bug please outl
 Defining roles
 ===============
 
-Coursework allows institutions to define their permissions unique to their institution. If you wish for help setting these up please contact moodle@rvc.ac.uk 
+Coursework allows institutions to define their permissions unique to their institution. If you wish for help setting these up please contact moodle-coursework@jiscmail.ac.uk 
 
 Configuration
 =============
