@@ -1272,10 +1272,17 @@ function has_user_seen_tii_EULA_agreement(){
     // if TII plagiarism enabled check if user agreed/disagreed EULA
     $shouldseeEULA = false;
     if ($CFG->enableplagiarism) {
+
+	// DB table changed
+	if (get_config('plagiarism_turnitin', 'version') >= '2019050201') {
+            $userstable = 'plagiarism_turnitin_users';
+	} else {
+            $userstable = 'turnitintooltwo_users';
+	}
         $plagiarismsettings = (array)get_config('plagiarism');
         if (!empty($plagiarismsettings['turnitin_use'])) {
 
-            $sql = "SELECT * FROM {turnitintooltwo_users}
+            $sql = "SELECT * FROM {" . $userstable . "}
                  WHERE userid = :userid
                  and user_agreement_accepted <> 0";
 
