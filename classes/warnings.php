@@ -129,8 +129,8 @@ class warnings {
                     } else {
 
                         $sql = "SELECT groups.id,groups.name
-                                FROM mdl_groups groups
-                          INNER JOIN mdl_groups_members gm
+                                FROM {groups} groups
+                          INNER JOIN {groups_members} gm
                                   ON gm.groupid = groups.id
                                WHERE groups.courseid = :courseid
 		                         AND gm.userid = :userid";
