@@ -247,9 +247,9 @@ class outstanding_marking   {
                                    COUNT(a.id) AS ssmID  FROM(
                                                   SELECT f.id AS fid, cs.id AS csid, cs.allocatableid ,ssm.id, COUNT(f.id) AS count_feedback,   
                                                       cs.courseworkid
-                                                  FROM mdl_coursework_submissions cs  LEFT JOIN
-                                                       mdl_coursework_feedbacks f ON f.submissionid= cs.id 
-                                                  LEFT JOIN `mdl_coursework_sample_set_mbrs` ssm 
+                                                  FROM {coursework_submissions} cs  LEFT JOIN
+                                                       {coursework_feedbacks} f ON f.submissionid= cs.id
+                                                  LEFT JOIN {coursework_sample_set_mbrs} ssm
                                                   ON  cs.courseworkid = ssm.courseworkid AND cs.allocatableid =ssm.allocatableid    
                                                   WHERE cs.courseworkid = :courseworkid
                                                   GROUP BY cs.allocatableid, ssm.stage_identifier
