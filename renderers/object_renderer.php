@@ -468,20 +468,26 @@ class mod_coursework_object_renderer extends plugin_renderer_base {
      */
     protected function render_mod_coursework_coursework(mod_coursework_coursework $coursework) {
 
-        global $PAGE, $USER;
+        global $CFG, $PAGE, $USER;
 
-        // Show the details of the assessment (Name and introduction.
-        $out = html_writer::tag('h2', $coursework->name);
+        $out = '';
+
+        if ($CFG->branch < 400) {
+            // Show the details of the assessment (Name and introduction.
+            $out .= html_writer::tag('h2', $coursework->name);
+        }
 
         if (has_capability('mod/coursework:allocate', $coursework->get_context())) {
             $warnings = new warnings($coursework);
             $out .= $warnings->not_enough_assessors();
         }
 
-        // Intro has it's own <p> tags etc.
-        $out .= '<div class="description">';
-        $out .= format_module_intro('coursework', $coursework, $coursework->get_coursemodule_id());
-        $out .= '</div>';
+        if ($CFG->branch < 400) {
+            // Intro has it's own <p> tags etc.
+            $out .= '<div class="description">';
+            $out .= format_module_intro('coursework', $coursework, $coursework->get_coursemodule_id());
+            $out .= '</div>';
+        }
 
         // Deadlines section.
         $out .= html_writer::tag('h3', get_string('deadlines', 'coursework'));
@@ -1477,7 +1483,7 @@ class mod_coursework_object_renderer extends plugin_renderer_base {
             'courseworkid' => $personal_deadline_row->get_coursework()->id,
             'setpersonaldeadlinespage'   => '1'
         );
-        
+
 
         $allocatable_cell_helper = $personal_deadline_row->get_allocatable_cell();
         $personaldeadlines_cell_helper = $personal_deadline_row->get_personal_deadline_cell();
