@@ -41,7 +41,11 @@ use mod_coursework\allocation\strategy\base as allocation_strategy_base;
 use mod_coursework\decorators\coursework_groups_decorator;
 use mod_coursework\grade_judge;
 use mod_coursework\grading_report;
+use mod_coursework\render_helpers\grading_report\cells\first_name_cell;
 use mod_coursework\render_helpers\grading_report\cells\grade_for_gradebook_cell;
+use mod_coursework\render_helpers\grading_report\cells\last_name_cell;
+use mod_coursework\render_helpers\grading_report\cells\email_cell;
+use mod_coursework\render_helpers\grading_report\cells\idnumber_cell;
 use mod_coursework\render_helpers\grading_report\cells\moderation_agreement_cell;
 use mod_coursework\render_helpers\grading_report\cells\single_assessor_feedback_cell;
 use mod_coursework\render_helpers\grading_report\cells\filename_hash_cell;
@@ -146,6 +150,11 @@ class coursework extends table_base {
      * @var int
      */
     public $numberofmarkers;
+
+    /**
+     * @var int
+     */
+    public $finalstagegrading;
 
     /**
      * @var int 0 or 1
@@ -332,6 +341,11 @@ class coursework extends table_base {
     public $maxfiles;
 
     /**
+     * @var int
+     */
+    public $renamefiles;
+
+    /**
      * @var string
      */
     public $filetypes;
@@ -398,7 +412,7 @@ class coursework extends table_base {
      * @param int|\stdClass $db_record
      * @return mixed|\mod_coursework_coursework
      */
-    public static function find($db_record) {
+    public static function find($db_record, $reload = true) {
         $coursework_object = parent::find($db_record);
 
         if ($coursework_object && $coursework_object->is_configured_to_have_group_submissions()) {
@@ -433,11 +447,14 @@ class coursework extends table_base {
             if (empty($this->id)) {
                 throw new moodle_exception('Trying to get course module for a coursework that has not yet been saved');
             }
-            $module_id = $DB->get_field('modules', 'id', array('name' => 'coursework'));
-            $this->coursemodule = $DB->get_record('course_modules',
-                                                  array('course' => $this->get_course_id(),
-                                                        'module' => $module_id,
-                                                        'instance' => $this->id), '*', MUST_EXIST);
+            $module_record = module::$pool['name']['coursework'] ?? $DB->get_record('modules', ['name' => 'coursework']);
+            $module_id = $module_record->id;
+            $course_id = $this->get_course_id();
+            if (!isset(course_module::$pool['course-module-instance'][$course_id][$module_id][$this->id]->id)) {
+                $this->coursemodule = course_module::$pool['course-module-instance'][$course_id][$module_id][$this->id] =
+                    $DB->get_record('course_modules', ['course' => $course_id, 'module' => $module_id, 'instance' => $this->id], '*', MUST_EXIST);
+            }
+            $this->coursemodule = course_module::$pool['course-module-instance'][$course_id][$module_id][$this->id];
         }
 
         return $this->coursemodule;
@@ -477,6 +494,7 @@ class coursework extends table_base {
         $coursemodule = $this->get_course_module();
         return (int)$coursemodule->idnumber;
     }
+
 
     /**
      * Getter function for the coursework's course object.
@@ -527,17 +545,8 @@ class coursework extends table_base {
      * @return array
      */
     public function get_all_raw_feedbacks() {
-
-        global $DB;
-
-        $sql = "SELECT f.*
-                  FROM {coursework_feedbacks} f
-            INNER JOIN {coursework_submissions} s
-                    ON s.id = f.submissionid
-                 WHERE s.courseworkid = :courseworkid ";
-
-        $params['courseworkid'] = $this->id;
-        $feedbacks = $DB->get_records_sql($sql, $params);
+        feedback::fill_pool_coursework($this->id);
+        $feedbacks = feedback::$pool[$this->id]['id'];
 
         return $feedbacks;
     }
@@ -553,14 +562,13 @@ class coursework extends table_base {
             return 0;
         }
         // Count submitted work that this person has not graded.
-        $submissions = $DB->get_records('coursework_submissions',
-                                        array('courseworkid' => $this->id), '', 'id');
+        submission::fill_pool_coursework($this->id);
+        feedback::fill_pool_coursework($this->id);
+        $submissions = submission::$pool[$this->id]['id'];
         $count = 0;
         foreach ($submissions as $s) {
-            $feedbacks = $DB->count_records('coursework_feedbacks',
-                                            array('submissionid' => $s->id,
-                                                  'assessorid' => $USER->id));
-            if ($feedbacks < 1) {
+            $feedback = feedback::get_object($this->id, 'submissionid-assessorid', [$s->id, $USER->id]);
+            if (empty($feedback)) {
                 $count++;
             }
         }
@@ -689,7 +697,7 @@ class coursework extends table_base {
         $turnitinenabled = $this->tii_enabled();
 
         // Turn it in only allows one file.
-        $max_files = $turnitinenabled ? 1 : $this->maxfiles;
+        $max_files =  $this->maxfiles;
 
         // Turn it in only likes some file types.
         /* DOC, DOCX, Corel
@@ -969,10 +977,31 @@ class coursework extends table_base {
             $files = $fs->get_area_files($context->id, 'mod_coursework', 'submission',
                                          $submission->id, "id", false);
             foreach ($files as $f) {
+
+                $filename = basename($f->get_filename());
+
+                $foldername = '';
+
+                if($this->blindmarking == 0 || has_capability('mod/coursework:viewanonymous',$this->get_context())) {
+                    $submissionuser = $submission->get_allocatable();
+                    if ($this->is_configured_to_have_group_submissions() && $submissionuser->name) {
+                        $foldername = $submissionuser->name . '_';
+                    } elseif(!$this->is_configured_to_have_group_submissions()) {
+                        $foldername = $submissionuser->firstname . ' ' . $submissionuser->lastname . '_';
+                    }
+                }
+
+                $foldername     .=   $this->get_username_hash($submission->get_allocatable()->id());
+
+                $filename           =   $foldername.'/'.$filename;
+
                 /* @var $f stored_file */
-                $files_for_zipping[$f->get_filename()] = $f;
+                $files_for_zipping[$filename] = $f;
             }
         }
+
+
+
         // Create path for new zip file.
         $temp_zip = tempnam($CFG->dataroot.'/temp/', 'ocm_');
         // Zip files.
@@ -1216,28 +1245,21 @@ class coursework extends table_base {
      */
     public function assessor_has_allocation_for_student_not_in_current_stage($allocatable, $userid, $stage) {
 
-        global $DB, $USER;
-
-        if (!$userid){
+        global $USER;
+        if (!$userid) {
             $userid = $USER->id;
         }
-        $params = array(
-            'courseworkid' => $this->id,
-            'assessorid' => $userid,
-            'allocatableid' => $allocatable->id(),
-            'allocatabletype' => $allocatable->type(),
-            'stage' => $stage   );
+        allocation::fill_pool_coursework($this->id);
+        $records = isset(allocation::$pool[$this->id]['allocatableid-allocatabletype-assessorid'][$allocatable->id() . '-' . $allocatable->type() . "-$userid"]) ?
+            allocation::$pool[$this->id]['allocatableid-allocatabletype-assessorid'][$allocatable->id() . '-' . $allocatable->type() . "-$userid"] : [];
 
-        $sql = "SELECT *
-                FROM {coursework_allocation_pairs}
-                WHERE courseworkid = :courseworkid
-                AND assessorid = :assessorid
-                AND allocatableid = :allocatableid
-                AND allocatabletype = :allocatabletype
-                AND stage_identifier <> :stage";
+        foreach ($records as $record) {
+            if ($record->stage_identifier != $stage) {
+                return true;
+            }
+        }
 
-
-        return $DB->record_exists_sql($sql, $params);
+        return false;
     }
 
 
@@ -1268,17 +1290,113 @@ class coursework extends table_base {
      * @return submission[]
      */
     public function get_all_submissions() {
-
-        global $DB;
-
-        $submissions = $DB->get_records('coursework_submissions', array('courseworkid' => $this->id));
-
-        foreach ($submissions as &$submission) {
-            $submission = submission::find($submission);
-        }
+        submission::fill_pool_coursework($this->id);
+        $submissions = submission::$pool[$this->id]['id'];
 
         return $submissions;
     }
+
+    /**
+     * Get submissions that need grading, either in initial or final stage
+     * For multiple marker coursework if final grade is not given it is assumed that submission may need grading in
+     * either initial, final or both stages
+     *
+     * @throws \dml_exception
+     * @throws \dml_missing_record_exception
+     * @throws \dml_multiple_records_exception
+     */
+    public function get_submissions_needing_grading(){
+
+        $needsgrading = array();
+        $submissions = $this->get_finalised_submissions();
+
+        foreach ($submissions as $submission) {
+
+            $stage_identifier = ($this->has_multiple_markers())? 'final_agreed_1': 'assessor_1';
+            $submission = submission::find($submission);
+            if (!$feedback = $submission->get_assessor_feedback_by_stage($stage_identifier)){
+                $needsgrading[] = $submission;
+            }
+
+         }
+
+
+        return $needsgrading;
+
+    }
+
+    /**
+     * Get all graded submissions for the specified marking stage
+     *
+     * @param $stage_identifier
+     * @return array
+     * @throws \dml_missing_record_exception
+     * @throws \dml_multiple_records_exception
+     */
+    public function get_graded_submissions_by_stage($stage_identifier){
+
+        $graded = array();
+        $submissions = $this->get_finalised_submissions();
+
+        foreach ($submissions as $submission) {
+            $submission = submission::find($submission);
+            if ($feedback = $submission->get_assessor_feedback_by_stage($stage_identifier)){
+                $graded[$submission->id] = $submission;
+            }
+        }
+        return $graded;
+    }
+
+    /**
+     * Function to get all assessor's graded submissions within the specified coursework
+     *
+     * @param $assessorid
+     * @return array
+     * @throws \dml_exception
+     */
+    public function get_assessor_graded_submissions($assessorid){
+        global $DB;
+
+        $graded = array();
+        $params = array('courseworkid' => $this->id, 'assessorid' => $assessorid);
+        $sql = "SELECT cs.id
+                FROM {coursework_feedbacks} cf 
+                JOIN {coursework_submissions} cs 
+                ON cs.id = cf.submissionid
+                WHERE cs.courseworkid = :courseworkid 
+                AND assessorid = :assessorid";
+        $submissions =  $DB->get_records_sql($sql, $params);
+
+        foreach ($submissions as $submission) {
+            $submission = submission::find($submission);
+            $graded[$submission->id] = $submission;
+        }
+
+        return $graded;
+    }
+
+
+    /**
+     * Get all published submissions in the coursework
+     *
+     * @return array
+     * @throws \dml_exception
+     */
+    public function get_published_submissions(){
+        global $DB;
+
+        $sql = "SELECT *
+                FROM {coursework_submissions}
+                WHERE courseworkid = :courseworkid
+                AND firstpublished IS NOT NULL";
+
+      $submissions =  $DB->get_records_sql($sql, array('courseworkid' => $this->id));
+        foreach ($submissions as &$submission) {
+            $submission = submission::find($submission);
+        }
+        return $submissions;
+    }
+
 
     /**
      * Returns a hash of this user's id. Not username as this would be non-unique across
@@ -1425,21 +1543,11 @@ class coursework extends table_base {
      */
     public function get_unfinalised_students($fields = 'u.id, u.firstname, u.lastname') {
 
-        global $DB;
-
         $students = get_enrolled_users(context_course::instance($this->get_course_id()), 'mod/coursework:submit', 0, $fields);
-
-        $sql = "
-            SELECT submissions.userid
-              FROM {coursework_submissions} submissions
-             WHERE submissions.courseworkid = :courseworkid
-               AND submissions.finalised = 1
-        ";
-        $params = array('courseworkid' => $this->id);
-        $alreadyfinalised = $DB->get_records_sql($sql, $params);
-
-        foreach ($alreadyfinalised as $studentid => $studentrecord) {
-            unset ($students[$studentid]);
+        submission::fill_pool_coursework($this->id);
+        $alreadyfinalised = isset(submission::$pool[$this->id]['finalised'][1]) ? submission::$pool[$this->id]['finalised'][1] : [];
+        foreach ($alreadyfinalised as $submission) {
+            unset ($students[$submission->userid]);
         }
 
         return $students;
@@ -1742,7 +1850,11 @@ class coursework extends table_base {
         if ($this->is_configured_to_have_group_submissions()) {
             $report->add_cell(new group_cell($cell_items));
         } else {
+            $report->add_cell(new first_name_cell($cell_items));
+            $report->add_cell(new last_name_cell($cell_items));
+            $report->add_cell(new email_cell($cell_items));
             $report->add_cell(new user_cell($cell_items));
+            $report->add_cell(new idnumber_cell($cell_items));
         }
 
         if ($this->personal_deadlines_enabled()) {
@@ -2330,6 +2442,10 @@ class coursework extends table_base {
         $submissions = $DB->get_records('coursework_submissions',
             array('courseworkid' => $this->id, 'finalised'=>1), '', 'id');
 
+        foreach ($submissions as &$submission) {
+            $submission = submission::find($submission);
+        }
+
         return $submissions;
 
     }
@@ -2413,10 +2529,11 @@ class coursework extends table_base {
         return (bool)$this->extensionsenabled;
     }
 
-    /** Let us know if any extension was granted in the coursework
-     * @return bool
-     */
+    /*
+* @return bool
+*/
     public function extension_exists(){
+
         global $DB;
         return $DB->record_exists('coursework_extensions',array('courseworkid'=>$this->id));
     }
@@ -2513,33 +2630,38 @@ class coursework extends table_base {
      *
      */
     public function create_automatic_feedback() {
+        global $SESSION;
 
-        global $DB;
-
-        $module     =  $DB->get_record('modules',array('name'=>'coursework'));
-
-
-        //get all submissions that could need automatic agreement
-        $sql    =   "SELECT 	DISTINCT(cs.id)
-                     FROM 	{coursework} c,
-					        {coursework_submissions} cs,
-					        {coursework_feedbacks} cf
-			         WHERE 	c.id = cs.courseworkid
-			         AND	cs.id = cf.submissionid
-			         AND	c.numberofmarkers > 1
-			         AND 	cs.finalised = 1
-			         AND	cf.stage_identifier NOT LIKE 'final_agreed%'
-			         AND    c.id = :courseworkid
-			         AND    c.automaticagreementstrategy != 'null'
-			         AND    (c.gradeeditingtime = 0 OR c.gradeeditingtime != 0 AND cf.timecreated + c.gradeeditingtime <= :currenttime) ";
-
-        $submissionids    =   $DB->get_records_sql($sql,array('courseworkid'=>$this->id,'currenttime'=>time()));
-
-        foreach($submissionids as $s)   {
-
-            $submission = submission::find(array('id'=>$s->id));
-            //check if any feedback for this submission are editable
+        if ($this->numberofmarkers <= 1 || $this->automaticagreementstrategy == 'null') {
+            return;
+        }
+        submission::fill_pool_coursework($this->id);
+        feedback::fill_pool_coursework($this->id);
+        $submissions = isset(submission::$pool[$this->id]['finalised'][1]) ? submission::$pool[$this->id]['finalised'][1] : [];
+        if (empty($submissions)) {
+            return;
+        }
+        $current = time();
+        $gradeeditingtime = $this->gradeeditingtime;
+        $SESSION->keep_cache_data = 1;
+        foreach ($submissions as $submission) {
+            if ($gradeeditingtime != 0) {
+                // initial feedbacks - other feedbacks than final
+                $initial_feedbacks = isset(feedback::$pool[$this->id]['submissionid-stage_identifier_index'][$submission->id . '-others']) ?
+                    feedback::$pool[$this->id]['submissionid-stage_identifier_index'][$submission->id . '-others'] : [];
+                $valid_fb = false;
+                foreach ($initial_feedbacks as $feedback) {
+                    if ($feedback->timecreated + $gradeeditingtime <= $current) {
+                        $valid_fb = true;
+                        break;
+                    }
+                }
+                if (!$valid_fb) {
+                    continue;
+                }
+            }
             if (!$submission->editable_feedbacks_exist()) {
+                // this submission needs automatic agreement
                 $auto_feedback_classname = '\mod_coursework\auto_grader\\' . $submission->get_coursework()->automaticagreementstrategy;
                 /**
                  * @var auto_grader $auto_grader
@@ -2551,9 +2673,12 @@ class coursework extends table_base {
             }
 
         }
+        unset($SESSION->keep_cache_data);
+        feedback::remove_cache($this->id);
 
 
     }
+
 
     /** Function to check it Turnitin is enabled for the particular coursework
      * @return bool
@@ -2561,23 +2686,29 @@ class coursework extends table_base {
      */
     public function tii_enabled(){
 
-        global $CFG, $DB;
-        $turnitinenabled = false;
-        if ($CFG->enableplagiarism) {
-            $plagiarismsettings = (array)get_config('plagiarism');
-            if (!empty($plagiarismsettings['turnitin_use'])) {
-                $params = array(
-                    'cm' => $this->get_coursemodule_id(),
-                    'name' => 'use_turnitin',
-                    'value' => 1
-                );
-                if ($DB->record_exists('plagiarism_turnitin_config', $params)) {
-                    $turnitinenabled = true;
+        if (!isset(self::$pool[$this->id]['tii_enabled'][$this->id])) {
+            global $CFG, $DB;
+            $turnitinenabled = false;
+            if ($CFG->enableplagiarism) {
+                $plagiarismsettings = (array)get_config('plagiarism');
+                if (!empty($plagiarismsettings['turnitin_use'])) {
+                    $params = array(
+                        'cm' => $this->get_coursemodule_id(),
+                        'name' => 'use_turnitin',
+                        'value' => 1
+                    );
+                    if ($DB->record_exists('plagiarism_turnitin_config', $params)) {
+                        $turnitinenabled = true;
+                    }
                 }
             }
+            self::$pool[$this->id]['tii_enabled'][$this->id] = $turnitinenabled;
         }
-        return $turnitinenabled;
+        return self::$pool[$this->id]['tii_enabled'][$this->id];
     }
+
+
+
 
 
 
@@ -2631,7 +2762,8 @@ class coursework extends table_base {
         $allocatable->coursework_id =   $this->id;
 
         if ($this->personal_deadlines_enabled()) {
-            $deadlinerecord = $DB->get_record('coursework_person_deadlines', array('courseworkid' => $this->id, 'allocatableid' => $allocatable->id));
+            personal_deadline::fill_pool_coursework($this->id);
+            $deadlinerecord = personal_deadline::get_object($this->id, 'allocatableid-allocatabletype', [$allocatable->id, $allocatable->type()]);
 
             if (!empty($deadlinerecord)) {
                 $allocatable->deadline = $deadlinerecord->personal_deadline;
@@ -2686,7 +2818,6 @@ class coursework extends table_base {
         return (bool)$this->markingdeadlineenabled ;
     }
 
-
     /**
      * Function to check if a given individual is in the given group
      *
@@ -2696,9 +2827,7 @@ class coursework extends table_base {
      * @throws \dml_exception
      */
     public function student_in_group($studentid, $groupid){
-
         global $DB;
-
         $sql = "SELECT groups.*
                   FROM {groups} groups
             INNER JOIN {groups_members} gm
@@ -2706,34 +2835,28 @@ class coursework extends table_base {
                  WHERE gm.userid = :userid
                    AND groups.courseid = :courseid
                    AND groups.id = :groupid";
-
         $params = array('userid' => $studentid,
-                        'courseid' => $this->get_course()->id,
-                        'groupid' => $groupid);
-
+            'courseid' => $this->get_course()->id,
+            'groupid' => $groupid);
         return $DB->record_exists_sql($sql, $params);
     }
-
     /**
      * Function to retrieve all submissions by coursework
      *
      * @return submissions
      */
-    function retrieve_submissions_by_coursework() {
+    function retrieve_submissions_by_coursework(){
         global $DB;
-
         return $DB->get_records('coursework_submissions', ['courseworkid' => $this->id, 'allocatabletype' => 'user']);
     }
-
     /**
      * Function to retrieve all submissions submitted by a user
      *
      * @param $user_id
      * @return submissions
      */
-    public function retrieve_submissions_by_user($user_id) {
+    public function retrieve_submissions_by_user($user_id){
         global $DB;
-
         return $DB->get_records('coursework_submissions', ['courseworkid' => $this->id, 'authorid' => $user_id, 'allocatabletype' => 'user']);
     }
 
@@ -2744,32 +2867,163 @@ class coursework extends table_base {
      * @return feedbacks
      */
     public function retrieve_feedbacks_by_submission($submission_id) {
-        global $DB;
-
-        return $DB->get_records('coursework_feedbacks', ['submissionid' => $submission_id]);
+        feedback::fill_pool_coursework($this->id);
+        $result = isset(feedback::$pool[$this->id][submissionid]) ? feedback::$pool[$this->id][submissionid] : [];
+        return $result;
     }
-
     /**
      * Function to remove all submissions submitted by a user
      *
      * @param $user_id
      */
-    public function remove_submissions_by_user($user_id) {
+    public function remove_submissions_by_user($user_id){
         global $DB;
-
         $DB->delete_records('coursework_submissions', ['courseworkid' => $this->id, 'authorid' => $user_id, 'allocatabletype' => 'user']);
     }
-
     /**
      * Function to remove all submissions by this coursework
      *
      * @return submissions
      */
-    public function remove_submissions_by_coursework() {
+    public function remove_submissions_by_coursework(){
         global $DB;
-
         $DB->delete_records('coursework_submissions', ['courseworkid' => $this->id, 'allocatabletype' => 'user']);
     }
+    /**
+     * Function to Remove the corresponding file by context, item-id and fielarea
+     *
+     * @param $context_id
+     * @param $item_id
+     * @param $filearea
+     */
+    public function remove_corresponding_file($context_id, $item_id, $filearea){
+        global $DB;
+        $component = 'mod_coursework';
+        $fs = get_file_storage();
+        $fs->delete_area_files($context_id, $component, $filearea, $item_id);
+    }
+    /**
+     * Function to Remove all feedbacks by a submission
+     *
+     * @param $submission_id
+     */
+    public function remove_feedbacks_by_submission($submission_id){
+        global $DB;
+        $DB->delete_records('coursework_feedbacks', ['submissionid' => $submission_id]);
+    }
+    /**
+     * Function to Remove all agreements by a feedback
+     *
+     * @param $feedback_id
+     */
+    public function remove_agreements_by_feedback($feedback_id){
+        global $DB;
+        $DB->delete_records('coursework_mod_agreements', ['feedbackid' => $feedback_id]);
+    }
+    /**
+     * Function to Remove all deadline extensions by user
+     *
+     * @param $user_id
+     */
+    public function remove_deadline_extensions_by_user($user_id){
+        global $DB;
+        $DB->execute('DELETE FROM {coursework_extensions} WHERE allocatabletype = ? AND (allocatableid = ? OR allocatableuser = ? ) ', array('user', $user_id, $user_id));
+    }
+    /**
+     * Function to Remove all personal deadlines by coursework
+     *
+     */
+    public function remove_personal_deadlines_by_coursework() {
+        global $DB;
+
+        $DB->execute('DELETE FROM {coursework_person_deadlines} WHERE allocatabletype = ? AND courseworkid = ? ', array('user', $this->id));
+        personal_deadline::remove_cache($this->id);
+    }
+    /**
+     * Function to Remove all deadline extensions by coursework
+     *
+     */
+    public function remove_deadline_extensions_by_coursework(){
+        global $DB;
+        $DB->execute('DELETE FROM {coursework_extensions} WHERE allocatabletype = ? AND courseworkid = ? ', array('user', $this->id));
+    }
+
+
+    /**
+     * Function to check if Coursework has any final feedback
+     *
+     * @return bool
+     * @throws \dml_exception
+     */
+    public function has_any_final_feedback(){
+        global $DB;
+
+        $sql = "SELECT * 
+                FROM {coursework_feedbacks} cf 
+                JOIN {coursework_submissions} cs ON cs.id = cf.submissionid
+                WHERE cs.courseworkid = :courseworkid
+                AND cf.stage_identifier = 'final_agreed_1'";
+
+        return $DB->record_exists_sql($sql, array('courseworkid' => $this->id));
+    }
+
+    /**
+     * Tells us the deadline for a specific allocatable.
+     *
+     * @param int $allocatableid
+     * @return int
+     */
+    public function get_allocatable_deadline($allocatableid) {
+        $deadline = $this->deadline;
+
+        if($this->use_groups){
+            $allocatable = group::find($allocatableid);
+        } else {
+            $allocatable = user::find($allocatableid);
+        }
+
+
+        if ($this->personal_deadlines_enabled()){
+            // find personal deadline for a user if this option enabled
+            $personal = $this->get_allocatable_personal_deadline($allocatable);
+            if (!empty($personal)) {
+                $deadline = $personal->deadline;
+            }
+        }
+
+        if($this->extensions_enabled()){ // check if coursework allows extensions
+            // check if extension for this user exists
+            $extension = $this->get_allocatable_extension($allocatable);
+            if (!empty($extension)) {
+                $deadline = $extension;
+            }
+        }
+
+        return $deadline;
+    }
+
+    /**
+     * * This function returns allocatable extension if given
+     * @param $allocatable
+     * @return bool/int
+     */
+    private function  get_allocatable_extension($allocatable)   {
+
+        global  $DB;
+        $extension = false;
+
+
+        if ($this->extensions_enabled() ) {
+            $extensionrecord = $DB->get_record('coursework_extensions', array('courseworkid' => $this->id,'allocatableid' => $allocatable->id));
+
+            if (!empty($extensionrecord)) {
+                $extension = $extensionrecord->extended_deadline;
+            }
+        }
+
+        return $extension;
+    }
+
 
     /**
      * Function to Remove all plagiarisms by a submission
@@ -2782,83 +3036,118 @@ class coursework extends table_base {
         $DB->delete_records('coursework_plagiarism_flags', ['submissionid' => $submission_id]);
     }
 
+
     /**
-     * Function to Remove the corresponding file by context, item-id and fielarea
+     * Function to check if Coursework has any submission
      *
-     * @param $context_id
-     * @param $item_id
-     * @param $filearea
+     * @return bool
+     * @throws \dml_exception
      */
-    public function remove_corresponding_file($context_id, $item_id, $filearea) {
+    public function has_any_submission(){
         global $DB;
 
-        $component  = 'mod_coursework';
+        $sql = "SELECT * 
+                FROM {coursework_submissions} cs 
+                WHERE cs.courseworkid = :courseworkid";
 
-        $fs = get_file_storage();
-        $fs->delete_area_files($context_id, $component, $filearea, $item_id);
+        return $DB->record_exists_sql($sql, array('courseworkid' => $this->id));
+    }
+
+
+    /**
+     * Function to check if coursework or course that a coursework belongs to is hidden
+     *
+     * @return bool
+     * @throws moodle_exception
+     */
+    public function is_coursework_visible(){
+
+        $visible = true;
+        if ($this->get_course_module()->visible == 0 || $this->get_course()->visible == 0){
+            $visible = false;
+        }
+        return $visible;
+
     }
 
     /**
-     * Function to Remove all feedbacks by a submission
-     *
-     * @param $submission_id
+     * @param null $stage_index
      */
-    public function remove_feedbacks_by_submission($submission_id) {
-        global $DB;
+    public function clear_stage($stage_index = null) {
+        if ($stage_index) {
+            if (isset($this->stages[$stage_index])) {
+                unset($this->stages[$stage_index]);
+            }
+        } else {
+            $this->stages = [];
+        }
+    }
 
-        $DB->delete_records('coursework_feedbacks', ['submissionid' => $submission_id]);
+
+    /**
+     * cache array
+     *
+     * @var
+     */
+    public static $pool;
+
+    /**
+     * Fill pool to cache for later use
+     *
+     * @param $array
+     */
+    public static function fill_pool($array) {
+        self::$pool = [
+            'id' => []
+        ];
+
+        foreach ($array as $record) {
+            $object = new self($record);
+            self::$pool['id'][$record->id] = $object;
+        }
     }
 
     /**
-     * Function to Remove all agreements by a feedback
      *
-     * @param $feedback_id
+     * @param $coursework_id
+     * @throws \dml_exception
      */
-    public function remove_agreements_by_feedback($feedback_id) {
+    public static function fill_pool_coursework($coursework_id) {
         global $DB;
-
-        $DB->delete_records('coursework_mod_agreements', ['feedbackid' => $feedback_id]);
+        if (empty(self::$pool['id'][$coursework_id])) {
+            $courseworks = $DB->get_records('coursework', ['id' => $coursework_id]);
+            self::fill_pool($courseworks);
+        }
     }
 
     /**
-     * Function to Remove all deadline extensions by user
      *
-     * @param $user_id
+     * @param $coursework_id
+     * @return bool
      */
-    public function remove_deadline_extensions_by_user($user_id) {
-        global $DB;
-
-        $DB->execute('DELETE FROM {coursework_extensions} WHERE allocatabletype = ? AND (allocatableid = ? OR allocatableuser = ? ) ', array('user', $user_id, $user_id));
+    public static function get_object($coursework_id) {
+        if (!isset(self::$pool['id'][$coursework_id])) {
+            self::fill_pool_coursework($coursework_id);
+        }
+        return self::$pool['id'][$coursework_id] ?? false;
     }
 
     /**
-     * Function to Remove all personal deadlines by user
-     *
-     * @param $user_id
-     */
-    public function remove_personal_deadlines_by_user($user_id) {
-        global $DB;
-
-        $DB->execute('DELETE FROM {coursework_person_deadlines} WHERE allocatabletype = ? AND (allocatableid = ? OR allocatableuser = ? ) ', array('user', $user_id, $user_id));
-    }
-
-    /**
-     * Function to Remove all deadline extensions by coursework
      *
      */
-    public function remove_deadline_extensions_by_coursework() {
+    public function fill_cache() {
         global $DB;
-
-        $DB->execute('DELETE FROM {coursework_extensions} WHERE allocatabletype = ? AND courseworkid = ? ', array('user', $this->id));
-    }
-
-    /**
-     * Function to Remove all personal deadlines by coursework
-     *
-     */
-    public function remove_personal_deadlines_by_coursework() {
-        global $DB;
-
-        $DB->execute('DELETE FROM {coursework_person_deadlines} WHERE allocatabletype = ? AND courseworkid = ? ', array('user', $this->id));
+        $coursework_id = $this->id;
+        submission::fill_pool_coursework($coursework_id);
+        coursework::fill_pool([$this]);
+        course_module::fill_pool([$this->get_course_module()]);
+        module::fill_pool($DB->get_records('modules', ['name' => 'coursework']));
+        feedback::fill_pool_submissions($coursework_id, array_keys(submission::$pool[$coursework_id]['id']));
+        allocation::fill_pool_coursework($coursework_id);
+        plagiarism_flag::fill_pool_coursework($coursework_id);
+        assessment_set_membership::fill_pool_coursework($coursework_id);
+        if (\core_plugin_manager::instance()->get_plugin_info('local_uolw_sits_data_import')) {
+            user::fill_candidate_number_data($this);
+        }
     }
 }

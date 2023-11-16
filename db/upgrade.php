@@ -2462,7 +2462,23 @@ function xmldb_coursework_upgrade($oldversion) {
         upgrade_mod_savepoint(true, 2018042401, 'coursework');
     }
 
-    if ($oldversion < 2018060400) {
+
+    if($oldversion < 2019071100) {
+
+        //Add fields for finalstagegrading
+        $fieldfinalstagegrading = new xmldb_field('finalstagegrading', XMLDB_TYPE_INTEGER, '1', true, XMLDB_NOTNULL, null, '0', 'numberofmarkers');
+
+        $table = new xmldb_table('coursework');
+
+        if (!$dbman->field_exists($table, $fieldfinalstagegrading)) {
+            $dbman->add_field($table, $fieldfinalstagegrading);
+        }
+
+        upgrade_mod_savepoint(true, 2019071100, 'coursework');
+    }
+
+
+    if ($oldversion < 2019110700) {
 
         // Define field plagiarismflagenabled to be added to coursework.
         $table = new xmldb_table('coursework');
@@ -2474,10 +2490,10 @@ function xmldb_coursework_upgrade($oldversion) {
         }
 
         // Coursework savepoint reached.
-        upgrade_mod_savepoint(true, 2018060400, 'coursework');
+        upgrade_mod_savepoint(true, 2019110700, 'coursework');
     }
 
-    if ($oldversion < 2018060404) {
+    if ($oldversion < 2019110800) {
 
         // Define table coursework_plagiarism_flag to be created.
         $table = new xmldb_table('coursework_plagiarism_flags');
@@ -2504,8 +2520,59 @@ function xmldb_coursework_upgrade($oldversion) {
         }
 
         // Coursework savepoint reached.
-        upgrade_mod_savepoint(true, 2018060404, 'coursework');
+        upgrade_mod_savepoint(true, 2019110800, 'coursework');
     }
+
+    if ($oldversion < 2019121403) {
+
+        // Define table coursework_plagiarism_flag to be created.
+        $table = new xmldb_table('coursework');
+
+        $field     =   $table->add_field('renamefiles',XMLDB_TYPE_INTEGER,'1',null,null,null,null);
+
+        // Conditionally launch add field.
+        if (!$dbman->field_exists($table, $field)) {
+            $dbman->add_field($table, $field);
+        }
+
+
+        $courseworkinstances       =       $DB->get_records('coursework');
+
+        foreach($courseworkinstances   as  $cwk) {
+            $courseworkhassubmissions = ($DB->get_records('coursework_submissions', array('courseworkid' => $cwk->id)))
+                ? true : false;
+
+            $cwk->renamefiles   = ($cwk->blindmarking == 1 || $courseworkhassubmissions)   ?   1 :  0 ;
+
+            $DB->update_record('coursework',$cwk);
+         }
+
+        // Coursework savepoint reached.
+        upgrade_mod_savepoint(true, 2019121403, 'coursework');
+    }
+
+    if ($oldversion < 2020111602) {
+
+        // Define field averagerounding to be added to coursework.
+        $table = new xmldb_table('coursework');
+        $field = new xmldb_field('roundingrule',
+            XMLDB_TYPE_CHAR,
+            '255',
+            null,
+            XMLDB_NOTNULL,
+            null,
+            'mid',
+            'automaticagreementstrategy');
+
+        // Conditionally launch add field averagerounding.
+        if (!$dbman->field_exists($table, $field)) {
+            $dbman->add_field($table, $field);
+        }
+
+        // Coursework savepoint reached.
+        upgrade_mod_savepoint(true, 2020111602, 'coursework');
+    }
+
 
 
     // Always needs to return true.

@@ -91,4 +91,36 @@ class group extends table_base implements allocatable, moderatable {
     public function is_valid_for_course($course) {
         return $this->courseid == $course->id;
     }
+
+    /**
+     * cache array
+     *
+     * @var
+     */
+    public static $pool;
+
+    /**
+     * Fill pool to cache for later use
+     *
+     * @param $array
+     */
+    public static function fill_pool($array) {
+        foreach ($array as $record) {
+            $object = new self($record);
+            self::$pool['id'][$record->id] = $object;
+        }
+    }
+
+    /**
+     * @param $id
+     * @return mixed
+     */
+    public static function get_object($id) {
+        if (!isset(self::$pool['id'][$id])) {
+            global $DB;
+            $user = $DB->get_record(self::$table_name, ['id' => $id]);
+            self::$pool['id'][$id] = new self($user);
+        }
+        return self::$pool['id'][$id];
+    }
 }

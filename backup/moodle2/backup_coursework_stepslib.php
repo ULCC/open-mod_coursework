@@ -5,7 +5,7 @@ class backup_coursework_activity_structure_step extends backup_activity_structur
     protected function define_structure()
     {
         global $DB;
-        
+
         foreach(array('coursework_submissions',
                       'coursework_allocation_pairs',
                       'coursework_mod_set_members',
@@ -13,13 +13,13 @@ class backup_coursework_activity_structure_step extends backup_activity_structur
                       'coursework_extensions',
                       'coursework_person_deadlines') as $tablename)
         {
-            $DB->execute("update {{$tablename}} set `allocatableuser`=0, `allocatablegroup`=0");
-            $DB->execute("update {{$tablename}} set `allocatableuser`=`allocatableid` where allocatabletype='user'");
-            $DB->execute("update {{$tablename}} set `allocatablegroup`=`allocatableid` where allocatabletype='group'");
+            $DB->execute("update {{$tablename}} set allocatableuser=0, allocatablegroup=0");
+            $DB->execute("update {{$tablename}} set allocatableuser=allocatableid where allocatabletype='user'");
+            $DB->execute("update {{$tablename}} set allocatablegroup=allocatableid where allocatabletype='group'");
         }
-        
+
         $userinfo = $this->get_setting_value('userinfo');
-        
+
         $coursework=new backup_nested_element('coursework',array('id'),
                                               array('formid',
                                                     'course',
@@ -72,6 +72,7 @@ class backup_coursework_activity_structure_step extends backup_activity_structur
                                                     'automaticagreement',
                                                     'automaticagreementrange',
                                                     'automaticagreementstrategy',
+                                                    'averagerounding',
                                                     'feedbackreleaseemail',
                                                     'gradeeditingtime',
                                                     'markingdeadlineenabled',
@@ -316,7 +317,7 @@ class backup_coursework_activity_structure_step extends backup_activity_structur
             $coursework->add_child($allocation_configs);
             //And sample members
             $coursework->add_child($sample_members);
-        
+
             //And submissions are made up from individual submission instances
             $submissions->add_child($submission);
             //Submissions have multiple feedback items
@@ -377,30 +378,30 @@ class backup_coursework_activity_structure_step extends backup_activity_structur
 
             $allocation_config->set_source_table('coursework_allocation_config',
                                                  array('courseworkid'=>backup::VAR_PARENTID));
-                                        
+
             //Mark important foreign keys
             $feedback->annotate_ids('user','assessorid');
             $feedback->annotate_ids('user','lasteditedbyuser');
             $feedback->annotate_ids('user','markernumber');
-        
+
             $submission->annotate_ids('user','userid');
             $submission->annotate_ids('user','createdby');
             $submission->annotate_ids('user','lastupdatedby');
-            $submission->annotate_ids('user','allocatableuser');   
+            $submission->annotate_ids('user','allocatableuser');
             $submission->annotate_ids('group','allocatablegroup');
 
             $reminder->annotate_ids('user','userid');
 
             $pair->annotate_ids('user','assessorid');
-            $pair->annotate_ids('user','allocatableuser');   
+            $pair->annotate_ids('user','allocatableuser');
             $pair->annotate_ids('group','allocatablegroup');
-        
+
             $allocation_config->annotate_ids('user','assessorid');
 
-            $modsetmember->annotate_ids('user','allocatableuser');   
+            $modsetmember->annotate_ids('user','allocatableuser');
             $modsetmember->annotate_ids('group','allocatablegroup');
 
-            $extension->annotate_ids('user','allocatableuser');   
+            $extension->annotate_ids('user','allocatableuser');
             $extension->annotate_ids('group','allocatablegroup');
 
             $personal_deadline->annotate_ids('user','allocatableuser');
@@ -423,8 +424,8 @@ class backup_coursework_activity_structure_step extends backup_activity_structur
         $coursework->annotate_ids('grouping','grouping_id');
 
         $coursework->set_source_table('coursework',array('id'=>backup::VAR_ACTIVITYID));
-        
-        return $this->prepare_activity_structure($coursework);        
-        
+
+        return $this->prepare_activity_structure($coursework);
+
     }
 }

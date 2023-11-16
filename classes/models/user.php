@@ -30,7 +30,7 @@ class user extends table_base implements allocatable, moderatable {
      * @param bool $data
      */
     public function __construct($data = false) {
-        $allnames = get_all_user_name_fields();
+        $allnames = \core_user\fields::get_name_fields();
         foreach($allnames as $namefield) {
             $this->$namefield = '';
         }
@@ -109,6 +109,85 @@ class user extends table_base implements allocatable, moderatable {
      */
     public function __toString() {
         return $this->id;
+    }
+
+
+    /**
+     * cache array
+     *
+     * @var
+     */
+    //public static $pool;
+
+    /**
+     *
+     * @param $coursework_id
+     * @throws \dml_exception
+     */
+    /*
+    public static function fill_pool_coursework($coursework_id) {
+        if (isset(static::$pool[$coursework_id])) {
+            return;
+        }
+        $key = static::$table_name;
+        $cache = \cache::make('mod_coursework', 'courseworkdata', ['id' => $coursework_id]);
+
+        $data = $cache->get($key);
+        if ($data === false) {
+            // no cache found
+            $data = static::get_cache_array($coursework_id);
+            $cache->set($key, $data);
+        }
+
+        static::$pool[$coursework_id] = $data;
+    }
+    */
+
+    /**
+     * @param $coursework_id
+     */
+    /*
+    public static function remove_cache($coursework_id) {
+        global $SESSION;
+        if (!empty($SESSION->keep_cache_data)) {
+            return;
+        }
+        static::$pool[$coursework_id] = null;
+        $cache = \cache::make('mod_coursework', 'courseworkdata', ['id' => $coursework_id]);
+        $cache->delete(static::$table_name);
+    }
+    */
+
+    /**
+     * cache array
+     *
+     * @var
+     */
+    public static $pool;
+
+    /**
+     * Fill pool to cache for later use
+     *
+     * @param $array
+     */
+    public static function fill_pool($array) {
+        foreach ($array as $record) {
+            $object = new self($record);
+            self::$pool['id'][$record->id] = $object;
+        }
+    }
+
+    /**
+     * @param $id
+     * @return mixed
+     */
+    public static function get_object($id) {
+        if (!isset(self::$pool['id'][$id])) {
+            global $DB;
+            $user = $DB->get_record(self::$table_name, ['id' => $id]);
+            self::$pool['id'][$id] = new self($user);
+        }
+        return self::$pool['id'][$id];
     }
 
 

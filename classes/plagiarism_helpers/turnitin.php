@@ -25,8 +25,8 @@ class turnitin extends base {
         global $DB, $CFG;
 
         if ($CFG->enableplagiarism) {
-            $plagiarismsettings = (array)get_config('plagiarism');
-            if (!empty($plagiarismsettings['turnitin_use'])) {
+            $plagiarismsettings = (array)get_config('plagiarism_turnitin');
+            if (!empty($plagiarismsettings['enabled'])) {
                 $params = array(
                     'cm' => $this->get_coursework()->get_course_module()->id,
                     'name' => 'use_turnitin',

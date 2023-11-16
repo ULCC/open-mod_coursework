@@ -1,6 +1,7 @@
 <?php
 
 namespace mod_coursework\traits;
+use mod_coursework\models\assessment_set_membership;
 use mod_coursework\models\coursework;
 use mod_coursework\models\feedback;
 use mod_coursework\models\submission;
@@ -89,7 +90,7 @@ trait allocatable_functions {
     public function has_all_initial_feedbacks($coursework) {
         global $DB;
 
-       $expected_markers = $coursework->numberofmarkers;
+        $expected_markers = $coursework->numberofmarkers;
 
         $sql = "
             SELECT COUNT(*)
@@ -101,25 +102,25 @@ trait allocatable_functions {
                AND s.courseworkid = :courseworkid
         ";
         $feedbacks = $DB->count_records_sql($sql,
-                                         array('id' => $this->id(),
-                                               'courseworkid' => $coursework->id()));
+            array('id' => $this->id(),
+                'courseworkid' => $coursework->id()));
 
-      // when sampling is enabled, calculate how many stages are in sample
-      if ($coursework->sampling_enabled()) {
+        // when sampling is enabled, calculate how many stages are in sample
+        if ($coursework->sampling_enabled()) {
 
-          $sql = "SELECT COUNT(*)
+            $sql = "SELECT COUNT(*)
                   FROM {coursework_sample_set_mbrs}
                   WHERE courseworkid = :courseworkid
                   AND allocatableid = :allocatableid
                   AND allocatabletype = :allocatabletype";
 
-          $markers = $DB->count_records_sql($sql,
-                                            array('courseworkid' => $coursework->id(),
-                                                  'allocatableid' => $this->id(),
-                                                  'allocatabletype' => $this->type()));
+            $markers = $DB->count_records_sql($sql,
+                array('courseworkid' => $coursework->id(),
+                    'allocatableid' => $this->id(),
+                    'allocatabletype' => $this->type()));
 
-          $expected_markers = $markers + 1; // there is always a marker for stage 1
-      }
+            $expected_markers = $markers + 1; // there is always a marker for stage 1
+        }
 
         return $feedbacks == $expected_markers;
     }
@@ -129,21 +130,14 @@ trait allocatable_functions {
      * @return array
      */
     public function get_initial_feedbacks($coursework) {
-        global $DB;
-        $sql = "
-            SELECT f.*
-              FROM {coursework_feedbacks} f
-        INNER JOIN {coursework_submissions} s
-                ON f.submissionid = s.id
-             WHERE f.stage_identifier LIKE 'assess%'
-               AND s.allocatableid = :id
-               AND s.courseworkid = :courseworkid
-        ";
-        $result = $DB->get_records_sql($sql,
-                                         array('id' => $this->id(),
-                                               'courseworkid' => $coursework->id()));
-        $result_as_classes = array_map(function($raw) { return new feedback($raw); }, $result);
-        return $result_as_classes;
+        $this->fill_submission_and_feedback($coursework);
+        $result = [];
+        $submission = $this->get_submission($coursework);
+        if ($submission) {
+            $result = isset(feedback::$pool[$coursework->id]['submissionid-stage_identifier_index'][$submission->id . '-others']) ?
+                feedback::$pool[$coursework->id]['submissionid-stage_identifier_index'][$submission->id . '-others'] : [];
+        }
+        return $result;
     }
 
     /**
@@ -151,7 +145,18 @@ trait allocatable_functions {
      * @return submission
      */
     public function get_submission($coursework) {
-        return submission::find(array('allocatableid' => $this->id(),
-                                      'courseworkid' => $coursework->id()));
+        $this->fill_submission_and_feedback($coursework);
+        $result = submission::get_object($coursework->id, 'allocatableid', [$this->id]);
+        return $result;
+    }
+
+    /**
+     *
+     * @param $coursework
+     */
+    private function fill_submission_and_feedback($coursework) {
+        $coursework_id = $coursework->id;
+        submission::fill_pool_coursework($coursework_id);
+        feedback::fill_pool_coursework($coursework_id);
     }
 }

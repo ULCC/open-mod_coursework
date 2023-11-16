@@ -308,6 +308,50 @@ class submissions_controller extends controller_base {
         redirect($coursework_page_url);
     }
 
+
+    protected function unfinalise_submission()  {
+
+        global  $USER, $DB;
+
+
+
+        $allocatableids     =   (!is_array($this->params['allocatableid']))  ?  array($this->params['allocatableid']) : $this->params['allocatableid']  ;
+
+        $personaldeadline_page_url = new \moodle_url('/mod/coursework/actions/personal_deadline.php',
+            array('id'=>$this->coursework->get_coursemodule_id(),'multipleuserdeadlines'=>1,'setpersonaldeadlinespage'=>1,
+                'courseworkid'=>$this->params['courseworkid'],'allocatabletype'=>$this->params['allocatabletype']));
+
+        $changedeadlines    =   false;
+
+        foreach($allocatableids as $aid) {
+
+            $submission_db = $DB->get_record('coursework_submissions',
+                array('courseworkid' => $this->params['courseworkid'], 'allocatableid' => $aid, 'allocatabletype' => $this->params['allocatabletype']));
+            if (!empty($submission_db)) {
+                $submission = \mod_coursework\models\submission::find($submission_db);
+                       
+                if ($submission->can_be_unfinalised()) {
+                    $submission->finalised = 0;
+                    $submission->save();
+                    $personaldeadline_page_url->param("allocatableid_arr[$aid]",$aid);
+                    $changedeadlines    =   true;
+                }
+            }
+
+        }
+
+
+
+        if (!empty($changedeadlines)) {
+            redirect($personaldeadline_page_url, get_string('unfinalisedchangesubmissiondate', 'mod_coursework'));
+        } else {
+            $setpersonaldeadline_page_url = new \moodle_url('/mod/coursework/actions/set_personal_deadlines.php',
+                array('id'=>$this->coursework->get_coursemodule_id()));
+            redirect($setpersonaldeadline_page_url);
+        }
+
+    }
+
     protected function prepare_environment() {
 
         if (!empty($this->params['submissionid'])) {

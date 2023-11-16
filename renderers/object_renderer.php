@@ -125,8 +125,7 @@ class mod_coursework_object_renderer extends plugin_renderer_base {
         }
 
         // Rubric stuff if it's there
-
-        if ($coursework->is_using_advanced_grading()) {
+        if ($coursework->is_using_advanced_grading() && ($coursework->finalstagegrading ==0  || ($coursework->finalstagegrading ==1 &&  $feedback->stage_identifier != 'final_agreed_1'))) {
             $table_row = new html_table_row();
             $left_cell = new html_table_cell();
             $right_cell = new html_table_cell();
@@ -141,6 +140,13 @@ class mod_coursework_object_renderer extends plugin_renderer_base {
         }
 
         $out .= html_writer::table($table);
+
+        // It seems html_table doesn't support colgroup, so manually add it here
+        $colgroup = '<colgroup><col class="col1" style="width: 20%;"><col class="col2" style="width: 80%;"></colgroup>';
+        $to_replace = '</table>';
+        $pos = strrpos($out, $to_replace);
+
+        $out = substr_replace($out, $colgroup . $to_replace, $pos, strlen($to_replace));
 
         return $out;
     }
@@ -468,20 +474,26 @@ class mod_coursework_object_renderer extends plugin_renderer_base {
      */
     protected function render_mod_coursework_coursework(mod_coursework_coursework $coursework) {
 
-        global $PAGE, $USER;
+        global $CFG, $PAGE, $USER;
 
-        // Show the details of the assessment (Name and introduction.
-        $out = html_writer::tag('h2', $coursework->name);
+        $out = '';
+
+        if ($CFG->branch < 400) {
+            // Show the details of the assessment (Name and introduction.
+            $out .= html_writer::tag('h2', $coursework->name);
+        }
 
         if (has_capability('mod/coursework:allocate', $coursework->get_context())) {
             $warnings = new warnings($coursework);
             $out .= $warnings->not_enough_assessors();
         }
 
-        // Intro has it's own <p> tags etc.
-        $out .= '<div class="description">';
-        $out .= format_module_intro('coursework', $coursework, $coursework->get_coursemodule_id());
-        $out .= '</div>';
+        if ($CFG->branch < 400) {
+            // Intro has it's own <p> tags etc.
+            $out .= '<div class="description">';
+            $out .= format_module_intro('coursework', $coursework, $coursework->get_coursemodule_id());
+            $out .= '</div>';
+        }
 
         // Deadlines section.
         $out .= html_writer::tag('h3', get_string('deadlines', 'coursework'));
@@ -492,6 +504,11 @@ class mod_coursework_object_renderer extends plugin_renderer_base {
         $is_published = $coursework->user_grade_is_published($USER->id);
         $allowed_to_add_general_feedback = has_capability('mod/coursework:addgeneralfeedback', $coursework->get_context());
         $canaddgeneralfeedback = has_capability('mod/coursework:addgeneralfeedback', $PAGE->context);
+
+        $out .= html_writer::tag('h3', get_string('gradingsummary', 'coursework'));
+        $out .= $this->coursework_grading_summary_table($coursework);
+
+
         // Show general feedback if it's there and the deadline has passed or general feedback's date is not enabled which means it should be displayed automatically
         if (($coursework->is_general_feedback_enabled() && $allowed_to_add_general_feedback && (time() > $coursework->generalfeedback || $cangrade || $canpublish || $is_published)) || !$coursework->is_general_feedback_enabled()) {
             $out .= html_writer::tag('h3', get_string('generalfeedback', 'coursework'));
@@ -1184,13 +1201,19 @@ class mod_coursework_object_renderer extends plugin_renderer_base {
      * @return string
      */
     protected function make_file_link($files, $file, $class_name = 'submissionfile') {
-        global $CFG;
+        global $CFG, $OUTPUT;
 
         $url = "{$CFG->wwwroot}/pluginfile.php/{$file->get_contextid()}" .
             "/mod_coursework/{$files->get_file_area_name()}";
         $filename = $file->get_filename();
+
+        $image = $OUTPUT->pix_icon(file_file_icon($file),
+                                   $filename,
+                        'moodle',
+                               array('class' => 'submissionfileicon'));
+
         $fileurl = $url . $file->get_filepath() . $file->get_itemid() . '/' . rawurlencode($filename);
-        return html_writer::link($fileurl, $filename, array('class' => $class_name));
+        return html_writer::link($fileurl, $image.$filename, array('class' => $class_name));
     }
 
     /**
@@ -1363,6 +1386,7 @@ class mod_coursework_object_renderer extends plugin_renderer_base {
      * @return string
      */
     protected function render_mod_coursework_personal_deadlines_table(mod_coursework_personal_deadlines_table $personal_deadlines_table){
+        global  $PAGE;
 
         $coursework_page_url = $this->get_router()->get_path('coursework', array('coursework' => $personal_deadlines_table->get_coursework())) ;
         $table_html =   '<div class="return_to_page">'.html_writer::link($coursework_page_url,get_string('returntocourseworkpage','mod_coursework')).'</div>';
@@ -1374,17 +1398,21 @@ class mod_coursework_object_renderer extends plugin_renderer_base {
         $usergroups =   $personal_deadlines_table->get_coursework()->get_allocatable_type();
 
         $table_html .=   '<div class="largelink">'.html_writer::link('#', get_string('setdateforselected','mod_coursework',$personal_deadlines_table->get_coursework()->get_allocatable_type()), array('id' => 'selected_dates')).'</div>';
-        $table_html .=  '<br />';
 
+
+        if (has_capability('mod/coursework:revertfinalised', $PAGE->context)) {
+            $table_html .= '<div class="largelink">' . html_writer::link('#', get_string('unfinaliseselected', 'mod_coursework', $personal_deadlines_table->get_coursework()->get_allocatable_type()), array('id' => 'selected_unfinalise')) . '</div>';
+        }
+        $table_html .=  '<br />';
         $url    =   $this->get_router()->get_path('edit personal deadline', array());
 
         $table_html .=   '<form  action="'.$url.'" id="coursework_personal_deadline_form" method="post">';
-
 
         $table_html .=  '<input type="hidden" name="courseworkid" value="'.$personal_deadlines_table->get_coursework()->id().'" />';
         $table_html .=  '<input type="hidden" name="allocatabletype" value="'.$personal_deadlines_table->get_coursework()->get_allocatable_type().'" />';
         $table_html .=  '<input type="hidden" name="setpersonaldeadlinespage" value="1" />';
         $table_html .=  '<input type="hidden" name="multipleuserdeadlines" value="1" />';
+        $table_html .=  '<input type="hidden" name="selectedtype" id="selectedtype" value="date" />';
 
 
         $table_html .= '
@@ -1406,6 +1434,9 @@ class mod_coursework_object_renderer extends plugin_renderer_base {
         $table_html .= '</th>';
         $table_html .= '<th>';
         $table_html .= $personaldeadlines_cell_helper->get_table_header($personal_deadlines_table->get_options());
+        $table_html .= '</th>';
+        $table_html .= '<th>';
+        $table_html .= get_string('tableheadstatus','mod_coursework');
         $table_html .= '</th>';
 
 
@@ -1477,16 +1508,358 @@ class mod_coursework_object_renderer extends plugin_renderer_base {
             'courseworkid' => $personal_deadline_row->get_coursework()->id,
             'setpersonaldeadlinespage'   => '1'
         );
-        
+
 
         $allocatable_cell_helper = $personal_deadline_row->get_allocatable_cell();
         $personaldeadlines_cell_helper = $personal_deadline_row->get_personal_deadline_cell();
         $row_html .= $allocatable_cell_helper->get_table_cell($personal_deadline_row);
         $row_html   .= $personaldeadlines_cell_helper->get_table_cell($personal_deadline_row);
+        $row_html   .= '' ;
+        $row_html   .=  "<td>".$personal_deadline_row->get_submission_status()."</td>";
         $row_html .= '</tr>';
 
         return $row_html;
     }
+
+
+    /**
+     * @param mod_coursework_coursework $coursework
+     * @return string
+     * @throws coding_exception
+     */
+    protected function coursework_grading_summary_table(mod_coursework_coursework $coursework) {
+        global $PAGE, $USER;
+
+        $gradedHeader = "";
+
+        $warning_message = "";
+        $stagename = $coursework->has_multiple_markers()? ' (Agreed grade)' : '';
+
+
+        $participants = 0;
+        $submitted = 0;
+        $needsgrading   =   0;
+        $graded = 0;
+        $finalgrade = 0;
+        $published = 0;
+
+
+        if (!$coursework->has_multiple_markers() && !$coursework->allocation_enabled() && !has_capability('mod/coursework:addinitialgrade',$coursework->get_context())
+            && has_capability('mod/coursework:addagreedgrade',$coursework->get_context())){
+
+            $warning_message = "<tr><td colspan='2'>You don't have a capability to grade anyone in this Coursework</td></tr>";
+
+        } else {
+
+            $participants = $this->get_allocatables_count_per_assessor($coursework);
+
+            $allsubmissions = $coursework->get_all_submissions();
+            $assessable_submitted_submissions = $this->get_submissions_for_assessor($coursework, $allsubmissions);
+            $submitted = count($assessable_submitted_submissions);
+
+            $assessable_submitted_submissions = $this->remove_unfinalised_submissions($assessable_submitted_submissions);
+
+            $assessable_submitted_submissions   =   $this->remove_ungradable_submissions($assessable_submitted_submissions);
+
+            //remove all submission with final grade
+            $assessable_submitted_submissions = $this->removed_final_graded_submissions($assessable_submitted_submissions);
+
+
+            //if has addagreedgrade or administergrade or addallocatedagreedgrade+initialgrade
+            if (has_any_capability(array('mod/coursework:addagreedgrade', 'mod/coursework:administergrades'), $coursework->get_context())
+                || (has_capability('mod/coursework:addinitialgrade', $coursework->get_context()) && has_capability('mod/coursework:addallocatedagreedgrade', $coursework->get_context()))) {
+
+                //count number of submissions at final grade stage
+                $numberofassessable = count($assessable_submitted_submissions);
+
+                $assessable_submitted_submissions = $this->remove_final_gradable_submissions($assessable_submitted_submissions);
+
+                $needsgrading = $numberofassessable - count($assessable_submitted_submissions);
+            }
+
+            //if has initialgrade
+            if (has_any_capability(array('mod/coursework:addinitialgrade', 'mod/coursework:administergrades'), $coursework->get_context())) {
+
+                $assessable_submitted_submissions = $this->remove_final_gradable_submissions($assessable_submitted_submissions);
+                $needsgrading += count($this->get_assessor_initial_graded_submissions($assessable_submitted_submissions));
+            }
+
+            $graded_submissions = $this->get_submissions_with_final_grade($this->get_submissions_for_assessor($coursework, $allsubmissions));
+            $graded = count($graded_submissions);
+
+
+            $finalgrade = $graded;
+            // display breakdown of marks for initial stages
+            if ($coursework->has_multiple_markers() && has_capability('mod/coursework:administergrades', $coursework->get_context())) {
+                $stages = $coursework->marking_stages();
+                foreach ($stages as $stage => $s) {
+                    if ($stage != 'final_agreed_1') {
+                        $initialassessorno = substr("$stage", -1);
+                        $gradedsubmissions = $coursework->get_graded_submissions_by_stage($stage);
+                        $grade = count($this->get_submissions_for_assessor($coursework, $gradedsubmissions));
+                        $gradedHeader .= "<br>" . get_string('initialassessorno', 'mod_coursework', $initialassessorno);
+                        $finalgrade .= "<br>" . $grade;
+                    }
+                }
+            }
+
+            $publishedsubmissions = $coursework->get_published_submissions();
+            $published = count($this->get_submissions_for_assessor($coursework, $publishedsubmissions));
+
+        }
+
+
+        // BUILD table
+        $table_html = '<table class="gradingsummary display"><tbody>';
+        $table_html .= $warning_message;
+        // participants row
+        $table_html .= '<tr><th >'.get_string('participants','mod_coursework').'</th><td>'.$participants.'</td></tr>';
+        // number of submission row
+        $table_html .= '<tr><th >'.get_string('submitted','mod_coursework').'</th><td>'.$submitted.'</td></tr>';
+        // submissions needs grading row
+        $table_html .= '<tr><th >'.get_string('needsgrading','mod_coursework').'</th><td>'.$needsgrading.'</td></tr>';
+        // submissions graded
+        if (has_capability('mod/coursework:addinitialgrade', $coursework->get_context()) && !is_siteadmin($USER)){
+            $table_html .= '<tr><th >' . get_string('graded', 'mod_coursework') . $stagename . $gradedHeader . '</th><td>' . $graded . '</td></tr>';
+        } else {
+            $table_html .= '<tr><th >' . get_string('graded', 'mod_coursework') . $stagename . $gradedHeader . '</th><td>' . $finalgrade . '</td></tr>';
+        }
+        // submissions graded and published
+        $table_html .= '<tr><th >'.get_string('gradedandpublished','mod_coursework').'</th><td>'.$published.'</td></tr>';
+
+
+        $table_html .= '</tbody></table>';
+
+        return $table_html;
+    }
+
+    /**
+     * Get number of participants assessor can see on the grading page
+     * @param coursework $coursework
+     */
+    public function get_allocatables_count_per_assessor($coursework){
+        global $USER;
+        $participant = 0;
+        $allocatables = $coursework->get_allocatables();
+
+        if (!$coursework->has_multiple_markers() && has_capability('mod/coursework:addagreedgrade', $coursework->get_context()) &&
+            !has_capability('mod/coursework:addinitialgrade', $coursework->get_context()) )   {
+
+
+            $submissions = $coursework->get_all_submissions();
+
+            foreach($submissions as $sub) {
+                $submission = submission::find($sub);
+                if ( $submission->final_grade_agreed()){
+
+                    continue;
+                } else if ( count($submission->get_assessor_feedbacks()) < $submission->max_number_of_feedbacks()){
+                    unset($submissions[$submission->id]);
+                }
+            }
+
+            $participant = count($submissions);
+
+        } else if (is_siteadmin($USER) || !$coursework->allocation_enabled() || has_any_capability(array('mod/coursework:administergrades'), $coursework->get_context())) {
+            $participant = count($allocatables);
+        } else {
+            foreach ($allocatables as $allocatable) {
+                $submission = $allocatable->get_submission($coursework);
+
+                if($coursework->assessor_has_any_allocation_for_student($allocatable) || has_capability('mod/coursework:addagreedgrade', $coursework->get_context())
+                    && !empty($submission) && (($submission->all_inital_graded()  && !$coursework->sampling_enabled())
+                        || ($coursework->sampling_enabled() && $submission->all_inital_graded() && $submission->max_number_of_feedbacks() >1 ))){
+                    $participant  ++;
+                }
+            }
+        }
+
+        return $participant;
+    }
+
+
+    /**
+     * Remove submissions that have not been finalised
+     *
+     * @param $submissions
+     * @return mixed
+     */
+    public  function remove_unfinalised_submissions($submissions)   {
+
+        foreach($submissions as $sub)   {
+
+            $submission = submission::find($sub);
+
+            if (empty($submission->finalised))     {
+                unset($submissions[$sub->id]);
+            }
+        }
+
+        return $submissions;
+    }
+
+    /**
+     * Remove submissions that have final grade
+     *
+     * @param $submissions
+     * @return mixed
+     */
+    public  function removed_final_graded_submissions($submissions) {
+
+        foreach($submissions as $sub)   {
+
+            $submission = submission::find($sub);
+
+            if (!empty($submission->get_final_grade() ))     {
+                unset($submissions[$sub->id]);
+            }
+        }
+
+        return $submissions;
+    }
+
+
+    /**
+     * Remove submissions that can't be graded
+     *
+     * @param $submissions
+     * @return mixed
+     * @throws coding_exception
+     */
+    public function remove_ungradable_submissions($submissions)     {
+
+        foreach($submissions as $sub)   {
+
+            $submission = submission::find($sub);
+
+            if (has_capability('mod/coursework:addallocatedagreedgrade',$submission->get_coursework()->get_context()) && !$submission->is_assessor_initial_grader() && $submission->all_inital_graded())     {
+                unset($submissions[$sub->id]);
+            }
+        }
+
+        return $submissions;
+    }
+
+    /**
+     * Remove submissions that can be given final grade
+     *
+     * @param $submissions
+     * @return mixed
+     */
+    public  function remove_final_gradable_submissions($submissions) {
+
+        foreach($submissions as $sub)   {
+
+            $submission = submission::find($sub);
+            if (!empty($submission->all_inital_graded()) )     {
+                unset($submissions[$sub->id]);
+            }
+        }
+
+        return $submissions;
+
+    }
+
+    /**
+     * Get submission graded by assessor in initial stages
+     *
+     * @param $submissions
+     * @return mixed
+     * @throws coding_exception
+     */
+    public function get_assessor_initial_graded_submissions($submissions)   {
+        global $USER;
+
+        foreach($submissions as $sub)   {
+
+            $submission = submission::find($sub);
+
+            if (count($submission->get_assessor_feedbacks()) >= $submission->max_number_of_feedbacks() || $submission->is_assessor_initial_grader()
+                && (!has_capability('mod/coursework:administergrades',$submission->get_coursework()->get_context()) && !is_siteadmin($USER->id)))   {
+
+                //is this submission assessable by this user at an inital gradig stage
+                unset($submissions[$sub->id]);
+            }
+        }
+
+        return $submissions;
+    }
+
+
+    /**
+     * Get submissions that have final feedback
+     *
+     * @param $submissions
+     * @return mixed
+     * @throws exception
+     */
+    public function get_submissions_with_final_grade($submissions){
+
+        foreach($submissions as $sub) {
+
+            $submission = submission::find($sub);
+
+            if(!$submission->get_final_feedback()){
+                unset($submissions[$sub->id]);
+
+            }
+        }
+
+        return $submissions;
+    }
+
+
+
+    /**
+     * Get submissions an assessor can see on the grading page or will be able to mark
+     *
+     * @param $coursework
+     * @param $submissions
+     * @return array
+     * @throws coding_exception
+     */
+    public function get_submissions_for_assessor($coursework, $submissions){
+        global $USER;
+
+        $gradeblesub = array();
+
+        if (!$coursework->has_multiple_markers() && has_capability('mod/coursework:addagreedgrade', $coursework->get_context()) &&
+            !has_capability('mod/coursework:addinitialgrade', $coursework->get_context()) )   {
+
+
+            foreach($submissions as $sub) {
+                $submission = submission::find($sub);
+                if ( $submission->final_grade_agreed()){
+                    continue;
+                } else if (count($submission->get_assessor_feedbacks()) < $submission->max_number_of_feedbacks()) {
+                        unset($submissions[$submission->id]);
+                }
+            }
+
+            $gradeblesub = $submissions;
+
+        } else if (is_siteadmin($USER) || !$coursework->allocation_enabled() || has_any_capability(array('mod/coursework:administergrades'), $coursework->get_context())) {
+
+                foreach($submissions as $sub) {
+                    $submission = submission::find($sub);
+                    $gradeblesub[$submission->id] = $submission;
+                }
+
+            } else {
+                foreach ($submissions as $sub) {
+                    $submission = submission::find($sub);
+                    if($coursework->assessor_has_any_allocation_for_student($submission->reload()->get_allocatable()) || (has_capability('mod/coursework:addagreedgrade', $coursework->get_context()))
+                        && !empty($submission) && (($submission->all_inital_graded()  && !$submission->get_coursework()->sampling_enabled())
+                            || ($submission->get_coursework()->sampling_enabled() && $submission->all_inital_graded() && $submission->max_number_of_feedbacks() >1))){
+
+                        $gradeblesub[$submission->id] = $submission;
+                    }
+                }
+            }
+
+        return $gradeblesub;
+    }
+
 
 
 }

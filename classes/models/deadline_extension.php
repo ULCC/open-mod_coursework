@@ -34,11 +34,9 @@ class deadline_extension extends table_base {
      * @return bool
      */
     public static function allocatable_extension_allows_submission($allocatable, $coursework) {
-        $params = array('allocatabletype' => $allocatable->type(),
-                        'allocatableid' => $allocatable->id(),
-                        'courseworkid' => $coursework->id,
-        );
-        $extension = self::find($params);
+        self::fill_pool_coursework($coursework->id);
+        $extension = self::get_object($coursework->id, 'allocatableid-allocatabletype', [$allocatable->id(), $allocatable->type()]);
+
         return !empty($extension) && $extension->extended_deadline > time();
     }
 
@@ -54,10 +52,9 @@ class deadline_extension extends table_base {
             $allocatable = $student;
         }
         if ($allocatable) {
-            return static::find(array('courseworkid' => $coursework->id,
-                                      'allocatableid' => $allocatable->id(),
-                                      'allocatabletype' => $allocatable->type(),
-                                ));
+            self::fill_pool_coursework($coursework->id);
+            $extension = self::get_object($coursework->id, 'allocatableid-allocatabletype', [$allocatable->id(), $allocatable->type()]);
+            return $extension;
         }
     }
 
@@ -66,7 +63,7 @@ class deadline_extension extends table_base {
      */
     public function get_coursework() {
         if (!isset($this->coursework)) {
-            $this->coursework = coursework::find($this->courseworkid);
+            $this->coursework = coursework::get_object($this->courseworkid);
         }
 
         return $this->coursework;
@@ -84,4 +81,61 @@ class deadline_extension extends table_base {
             $this->createdbyid = $USER->id;
         }
     }
+
+    /**
+     * cache array
+     *
+     * @var
+     */
+    public static $pool;
+
+    /**
+     *
+     * @param $coursework_id
+     * @return array
+     */
+    protected static function get_cache_array($coursework_id) {
+        global $DB;
+        $records = $DB->get_records(static::$table_name, ['courseworkid' => $coursework_id]);
+        $result = [
+            'allocatableid-allocatabletype' => []
+        ];
+        if ($records) {
+            foreach ($records as $record) {
+                $object = new self($record);
+                $result['allocatableid-allocatabletype'][$record->allocatableid . '-' . $record->allocatabletype][] = $object;
+            }
+        }
+        return $result;
+    }
+
+    /**
+     *
+     * @param $coursework_id
+     * @param $key
+     * @param $params
+     * @return bool
+     */
+    public static function get_object($coursework_id, $key, $params) {
+        if (!isset(self::$pool[$coursework_id])) {
+            self::fill_pool_coursework($coursework_id);
+        }
+        $value_key = implode('-', $params);
+        return self::$pool[$coursework_id][$key][$value_key][0] ?? false;
+    }
+
+    /**
+     *
+     */
+    protected function post_save_hook() {
+        self::remove_cache($this->courseworkid);
+    }
+
+    /**
+     *
+     */
+    protected function after_destroy() {
+        self::remove_cache($this->courseworkid);
+    }
+
 }

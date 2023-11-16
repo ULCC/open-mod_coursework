@@ -3,6 +3,7 @@
 namespace mod_coursework\allocation\table\cell;
 use mod_coursework\models\allocation;
 use mod_coursework\models\coursework;
+use mod_coursework\models\feedback;
 use mod_coursework\stages\base as stage_base;
 use mod_coursework\allocation\allocatable;
 use mod_coursework\models\submission;
@@ -422,32 +423,37 @@ class builder {
     /**
      * @return bool
      */
-    private function has_final_feedback(){
-        global $DB;
+    private function has_final_feedback() {
+        submission::fill_pool_coursework($this->coursework->id);
+        feedback::fill_pool_coursework($this->coursework->id);
+        $submission = submission::get_object(
+            $this->coursework->id,
+            'allocatableid-allocatabletype',
+            [$this->allocatable->id(), $this->allocatable->type()]
+        );
+        if($submission){
+        $feedbacks = isset(feedback::$pool[$this->coursework->id]['submissionid'][$submission->id]) ?
+            feedback::$pool[$this->coursework->id]['submissionid'][$submission->id] : [];
 
-        $sql = "SELECT *
-                  FROM {coursework_submissions} s
-                  JOIN {coursework_feedbacks} f
-                    ON f.submissionid = s.id
-                 WHERE s.courseworkid = :courseworkid
-                   AND s.allocatableid = :allocatableid
-                   AND s.allocatabletype = :allocatabletype
-                   AND f.stage_identifier = 'final_agreed_1'";
-
-        return $DB->record_exists_sql($sql, array('courseworkid'=>$this->coursework->id,
-                                                  'allocatableid'=>$this->allocatable->id(),
-                                                  'allocatabletype'=>$this->allocatable->type()));
+        foreach ($feedbacks as $feedback) {
+            if ($feedback->stage_identifier == 'final_agreed_1') {
+                return true;
+            }
+        }
+        }
+        return false;
     }
 
     /**
      * @return static
      */
-    private function get_submission(){
-
-        $submission_params = array('courseworkid' => $this->coursework->id,
-                                   'allocatableid' => $this->allocatable->id(),
-                                   'allocatabletype' => $this->allocatable->type());
-
-        return submission::find($submission_params);
+    private function get_submission() {
+        submission::fill_pool_coursework($this->coursework->id);
+        $submission = submission::get_object(
+            $this->coursework->id,
+            'allocatableid-allocatabletype',
+            [$this->allocatable->id(), $this->allocatable->type()]
+        );
+        return $submission;
     }
 }

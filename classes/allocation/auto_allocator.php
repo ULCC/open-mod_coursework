@@ -42,6 +42,8 @@ class auto_allocator {
                 $this->process_marking_stage($stage);
             }
         }
+        allocation::remove_cache($this->coursework->id);
+        allocation::fill_pool_coursework($this->coursework->id);
     }
 
     /**

@@ -98,6 +98,7 @@ class mod_coursework_mod_form extends moodleform_mod {
         $this->add_file_types_field();
         $this->add_max_file_size_field();
         $this->add_number_of_files_field();
+        $this->add_rename_file_field();
         $this->add_submission_notification_field();
         $this->add_enable_plagiarism_flag_field();
 
@@ -141,8 +142,6 @@ class mod_coursework_mod_form extends moodleform_mod {
         $this->add_use_groups_field();
         $this->add_grouping_field();
 
-
-        $this->add_plagiarism_elements_to_form();
 
         $this->standard_grading_coursemodule_elements();
         $this->add_tweaks_to_standard_grading_form_elements();
@@ -788,7 +787,58 @@ class mod_coursework_mod_form extends moodleform_mod {
         $moodle_form->setDefault('maxfiles', 1);
         $moodle_form->setType('maxfiles', PARAM_INT);
         $moodle_form->addHelpButton('maxfiles','maxfiles','mod_coursework');
-        $moodle_form->disabledIf('maxfiles', 'use_turnitin', 'eq', '1');
+
+    }
+
+
+    protected function add_rename_file_field()  {
+
+        global  $DB, $PAGE;
+
+        $moodle_form =& $this->_form;
+
+        $choices    =   array('0'=>get_string('no'),'1'=>get_string('yes'));
+        $courseworkid   =   $this->get_coursework_id();
+        $courseworkhassubmissions   =   (!empty($courseworkid)) ?
+            $courseworkhassubmissions = $DB->get_records('coursework_submissions', array('courseworkid' => $courseworkid))
+            : false;
+
+        if (empty($courseworkid) || empty($courseworkhassubmissions)) {
+
+            $moodle_form->addElement('select', 'renamefiles',
+                get_string('renamefiles', 'mod_coursework'), $choices);
+
+            $moodle_form->addHelpButton('renamefiles','renamefiles','mod_coursework');
+
+            $moodle_form->disabledIf('renamefiles', 'blindmarking', 'eq', '1');
+
+            $PAGE->requires->js_amd_inline("
+            require(['jquery'], function() {
+                       $('#id_blindmarking').change(function()  {
+                            console.log($(this).val());
+                            
+                            if ($(this).val()== 1)  {
+                                $('#id_renamefiles').val(1);
+                            } 
+                            
+                        });
+                });
+            ");
+
+
+        } else  {
+
+            $sql    =   "SELECT     *
+                         FROM       {coursework}     
+                         WHERE      id    =   :courseworkid
+                         AND        renamefiles = 1";
+
+
+            $settingvalue    =   ($DB->get_records_sql($sql,array('courseworkid'=>$courseworkid))) ? get_string('yesrenamefile','mod_coursework')  : get_string('norenamefile','mod_coursework')  ;
+
+            $moodle_form->addElement('static', 'renamefilesdescription', get_string('renamefiles', 'mod_coursework'),
+                $settingvalue);
+        }
 
     }
 
@@ -944,6 +994,16 @@ class mod_coursework_mod_form extends moodleform_mod {
         $moodle_form->addElement('select', 'blindmarking', get_string('blindmarking', 'mod_coursework'),$options);
         $moodle_form->addHelpButton('blindmarking', 'blindmarking', 'mod_coursework');
         $moodle_form->setDefault('blindmarking', $CFG->coursework_blindmarking);
+
+        $submission_exists = 0;
+        // disable the setting if at least one submission exists
+        $courseworkid = $this->get_coursework_id();
+        if ($courseworkid && mod_coursework\models\coursework::find($courseworkid)->has_any_submission()) {
+            $submission_exists = 1;
+        }
+
+        $moodle_form->addElement('hidden','submission_exists', $submission_exists);
+        $moodle_form->setType('submission_exists', PARAM_INT);
         $moodle_form->disabledIf('blindmarking', 'submission_exists', 'eq', 1);
 
         //disable blindmarking if forceblindmarking is enabled, process data for DB in get_data()
@@ -1070,35 +1130,33 @@ class mod_coursework_mod_form extends moodleform_mod {
 
     /**
      */
-    protected function add_plagiarism_elements_to_form() {
-        global $COURSE, $CFG;
-
-        $moodle_form =& $this->_form;
-
-        $course_context = context_course::instance($COURSE->id);
-        $version_required = '2016091401'; // version of plagiarism_turnitin modified for courseowrk
-        $plagiarismsettings = (array)get_config('plagiarism');
-
-        // if plagiarism enabled and modified version of plagiarism installed
-        if (!empty($CFG->enableplagiarism) && !empty($plagiarismsettings['turnitin_use'])) {
-            if (get_config('plagiarism_turnitin', 'version') >= $version_required) {
-                plagiarism_get_form_elements_module($moodle_form, $course_context, 'mod_coursework');
-
-            } else {
-                $moodle_form->addElement('header', 'plugin_header', get_string('turnitinpluginsettings', 'mod_coursework'));
-                $moodle_form->addElement('html', '<div class ="plagiarism_tii_version">' .
-                    get_string('tii_plagiarism_version_warning', 'mod_coursework', $version_required) . '</div>');
-            }
-        }
-    }
-
-    /**
-     */
     protected function add_tweaks_to_standard_grading_form_elements() {
         $moodle_form =& $this->_form;
 
         $moodle_form->addHelpButton('grade', 'grade', 'mod_coursework');
         $moodle_form->setExpanded('modstandardgrade');
+
+        $options = array(0=> get_string('sameforallstages', 'mod_coursework'),
+                         1=> get_string('simpledirectgrading', 'mod_coursework'));
+
+        $moodle_form->addElement('select', 'finalstagegrading', get_string('finalstagegrading', 'mod_coursework'), $options);
+        $moodle_form->addHelpButton('finalstagegrading', 'finalstagegrading', 'mod_coursework');
+        $moodle_form->setDefault('finalstagegrading',0);
+        $moodle_form->disabledIf('finalstagegrading', 'numberofmarkers', 'eq', 1);
+        $moodle_form->disabledIf('finalstagegrading', 'advancedgradingmethod_submissions', 'eq', "");
+
+
+        $feedbackexists = 0;
+        // disable the setting if at least one feedback exists
+        $courseworkid = $this->get_coursework_id();
+        if ($courseworkid && mod_coursework\models\coursework::find($courseworkid)->has_any_final_feedback()) {
+            $feedbackexists = 1;
+        }
+
+        $moodle_form->addElement('hidden','feedbackexists', $feedbackexists);
+        $moodle_form->setType('feedbackexists', PARAM_INT);
+        $moodle_form->disabledIf('finalstagegrading', 'feedbackexists', 'eq', 1);
+
 
         // Don't think this belongs here...
 //        $options = array(0 => get_string('no'), 1 => get_string('yes'));
@@ -1297,7 +1355,8 @@ class mod_coursework_mod_form extends moodleform_mod {
 
     private function add_automatic_agreement_enabled() {
         $options = array('none' => 'none',
-                         'percentage_distance' => 'percentage distance');
+                         'percentage_distance' => 'percentage distance',
+                         'average_grade' =>'average grade');
         $this->form()->addelement('select',
                                   'automaticagreementstrategy',
                                   get_string('automaticagreementofgrades', 'mod_coursework'),
@@ -1306,7 +1365,8 @@ class mod_coursework_mod_form extends moodleform_mod {
         $this->form()->addhelpbutton('automaticagreementstrategy', 'automaticagreement', 'mod_coursework');
 
         $this->form()->disabledif('automaticagreementstrategy', 'numberofmarkers', 'eq', 1);
-        $this->form()->disabledIf('automaticagreementrange', 'automaticagreementstrategy', 'eq', 'null');
+        $this->form()->disabledIf('automaticagreementrange', 'automaticagreementstrategy', 'neq', 'percentage_distance');
+
 
         $this->form()->addElement('select',
                                   'automaticagreementrange',
@@ -1314,6 +1374,21 @@ class mod_coursework_mod_form extends moodleform_mod {
                                   range(0, 100));
         $this->form()->setType('automaticagreementrange', PARAM_INT);
         $this->form()->setDefault('automaticagreementrange', 10);
+
+        // rounding of the average grade
+        $roundingoptions = array('mid' => get_string('roundmid', 'mod_coursework'),
+                                 'up' => get_string('roundup', 'mod_coursework'),
+                                 'down' => get_string('rounddown', 'mod_coursework'));
+
+        $this->form()->addElement('select',
+                                   'roundingrule',
+                                    get_string('roundingrule', 'mod_coursework'),
+                                    $roundingoptions);
+        $this->form()->addhelpbutton('roundingrule', 'roundingrule', 'mod_coursework');
+
+        $this->form()->setType('roundingrule', PARAM_ALPHAEXT);
+        $this->form()->setDefault('roundingrule', 'mid');
+        $this->form()->disabledIf('roundingrule', 'automaticagreementstrategy', 'neq', 'average_grade');
 
 
     }

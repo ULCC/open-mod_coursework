@@ -210,16 +210,24 @@ class csv {
     }
 
     /**
+     * @param null $groupid
+     * @param string $selected_submission_ids
      * @return array
      * @throws \coding_exception
      */
-    public function get_submissions(){
+    public function get_submissions($groupid = null, $selected_submission_ids = '') {
 
-        $params = array(
-            'courseworkid' => $this->coursework->id
-        );
-        return submission::find_all($params);
-
+        $submissions = submission::$pool[$this->coursework->id]['id'] ?? submission::find_all(['courseworkid' => $this->coursework->id]);
+        if ($selected_submission_ids && $selected_submission_ids = json_decode($selected_submission_ids)) {
+            $result = array_flip($selected_submission_ids);
+            foreach ($submissions as $submission) {
+                if (array_key_exists($submission->id, $result)) {
+                    $result[$submission->id] = $submission;
+                }
+            }
+            $submissions = $result;
+        }
+        return $submissions;
     }
 
     /**
@@ -243,9 +251,24 @@ class csv {
     public function other_assessors_cells(){
 
         $cells = 0;
-        for ($i = 1; $i < $this->coursework->get_max_markers() ; $i++) {
-           $cells = $cells + 2; // one for grade, one for feedback
+        if ($this->coursework->is_using_rubric()) {
+            $criterias = $this->coursework->get_rubric_criteria();
+            //we will increment by the number of criterias plus 1 for feedback
+            $increment  =   (count($criterias) * 2) +1;
+
+        } else {
+            $increment  =   2;
         }
+
+
+            for ($i = 1; $i < $this->coursework->get_max_markers(); $i++) {
+                $cells = $cells + $increment; // one for grade, one for feedback
+            }
+
+
+
+
+
 
         return $cells;
 

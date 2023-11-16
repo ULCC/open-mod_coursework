@@ -532,7 +532,7 @@ class ability extends \mod_coursework\framework\ability {
         $this->prevent('revert',
             'mod_coursework\models\submission',
             function (submission $submission) {
-                return $submission->get_coursework()->deadline_has_passed() && !$submission->has_extension()
+                return $submission->get_coursework()->deadline_has_passed() && (!$submission->has_extension() || $submission->extension_deadline() < time())
                 && !$submission->get_coursework()->allow_late_submissions();
             });
     }

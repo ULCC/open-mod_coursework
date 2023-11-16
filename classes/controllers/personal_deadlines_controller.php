@@ -4,6 +4,7 @@ namespace mod_coursework\controllers;
 use mod_coursework\ability;
 use mod_coursework\allocation\allocatable;
 use mod_coursework\forms\personal_deadline_form;
+use mod_coursework\models\coursework;
 use mod_coursework\models\personal_deadline;
 use mod_coursework\models\user;
 
@@ -157,6 +158,94 @@ class personal_deadlines_controller extends controller_base{
         );
 
         return $DB->get_record('coursework_person_deadlines', $params);
+    }
+
+    /**
+     * @param $time
+     * @return array
+     * @throws \coding_exception
+     * @throws \mod_coursework\exceptions\access_denied
+     * @throws \moodle_exception
+     * @throws \require_login_exception
+     */
+    public function insert_update($time){
+        global $USER;
+        if (!$this->validated($time)) {
+            return [
+                'error' => 1,
+                'message' => 'The new deadline you chose has already passed. Please select appropriate deadline'
+            ];
+        }
+        $this->coursework = coursework::find(['id'=>$this->params['courseworkid']]);
+        require_login($this->coursework->course);
+        $params = $this->set_default_current_deadline();
+
+        $ability = new ability(user::find($USER), $this->coursework);
+        $ability->require_can('edit', $this->personal_deadline);
+        $params['allocatableid']       =        (!is_array($params['allocatableid']))      ?    $params['allocatableid']
+            :    serialize($params['allocatableid'])   ;
+
+        $data = (object) $this->params;
+        if (empty($data->multipleuserdeadlines)) {
+            if (!$this->get_personal_deadline()) { // personal deadline doesnt exist
+                // add new
+                $data->createdbyid = $USER->id;
+                $data->personal_deadline = strtotime($time);
+                $this->personal_deadline = personal_deadline::build($data);
+                $this->personal_deadline->save();
+            } else {
+                // update
+                $data->lastmodifiedbyid = $USER->id;
+                $data->personal_deadline = strtotime($time);
+                $data->timemodified = time();
+                $this->personal_deadline->update_attributes($data);
+            }
+        } else {
+            $allocatables       =       unserialize($data->allocatableid);
+
+            foreach ($allocatables   as  $allocatableid) {
+                $data->allocatableid    =   $allocatableid;
+                $data->id   =   '';
+                //$data->id               =   '';
+                $findparams = array(
+                    'allocatableid' => $allocatableid,
+                    'allocatabletype' => $data->allocatabletype,
+                    'courseworkid' => $data->courseworkid,
+                );
+                $this->personal_deadline = personal_deadline::find_or_build($findparams);
+
+                if (empty($this->personal_deadline->personal_deadline)) { // personal deadline doesnt exist
+                    // add new
+                    $data->createdbyid = $USER->id;
+                    $this->personal_deadline = personal_deadline::build($data);
+                    $this->personal_deadline->save();
+                } else {
+                    // update
+                    $data->id   =   $this->personal_deadline->id;
+                    $data->lastmodifiedbyid = $USER->id;
+                    $data->timemodified = time();
+                    $this->personal_deadline->update_attributes($data);
+                }
+            }
+        }
+        $timestamp = $this->personal_deadline->personal_deadline;
+        $date = userdate($timestamp, '%a, %d %b %Y, %H:%M');
+        return [
+            'error' => 0,
+            'time' => $date,
+            'timestamp' => $timestamp
+        ];
+    }
+
+    /**
+     * @param $time
+     * @return bool
+     */
+    protected function validated($time) {
+        if(strtotime($time) <= time()) {
+            return false;
+        }
+        return true;
     }
 }
     

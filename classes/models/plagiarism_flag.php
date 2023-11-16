@@ -39,7 +39,8 @@ class plagiarism_flag extends table_base {
      */
     public function get_coursework() {
         if (!isset($this->coursework)) {
-            $this->coursework = coursework::find($this->courseworkid);
+            coursework::fill_pool_coursework($this->courseworkid);
+            $this->coursework = coursework::get_object($this->courseworkid);
         }
 
         return $this->coursework;
@@ -52,7 +53,9 @@ class plagiarism_flag extends table_base {
      */
     public function get_submission() {
         if (!isset($this->submission) && !empty($this->submissionid)) {
-            $this->submission = submission::find($this->submissionid);
+            submission::fill_pool_coursework($this->courseworkid);
+            $this->submission = isset(submission::$pool[$this->courseworkid]['id'][$this->submissionid]) ?
+                submission::$pool[$this->courseworkid]['id'][$this->submissionid] : null;
         }
 
         return $this->submission;
@@ -62,8 +65,10 @@ class plagiarism_flag extends table_base {
      * @param $submission
      * @return static
      */
-    public static function get_plagiarism_flag($submission){
-        return static::find(array('submissionid' => $submission->id));
+    public static function get_plagiarism_flag($submission) {
+        self::fill_pool_coursework($submission->courseworkid);
+        $result = self::get_object($submission->courseworkid, 'submissionid', [$submission->id]);
+        return $result;
     }
 
 
@@ -84,6 +89,62 @@ class plagiarism_flag extends table_base {
             break;
 
         }
+    }
+
+    /**
+     * cache array
+     *
+     * @var
+     */
+    public static $pool;
+
+    /**
+     *
+     * @param $coursework_id
+     * @return array
+     */
+    protected static function get_cache_array($coursework_id) {
+        global $DB;
+        $records = $DB->get_records(self::$table_name, ['courseworkid' => $coursework_id]);
+        $result = [
+            'submissionid' => []
+        ];
+        if ($records) {
+            foreach ($records as $record) {
+                $object = new self($record);
+                $result['submissionid'][$record->submissionid][] = $object;
+            }
+        }
+        return $result;
+    }
+
+    /**
+     *
+     * @param $coursework_id
+     * @param $key
+     * @param $params
+     * @return bool
+     */
+    public static function get_object($coursework_id, $key, $params) {
+        if (!isset(self::$pool[$coursework_id])) {
+            self::fill_pool_coursework($coursework_id);
+        }
+        $value_key = implode('-', $params);
+        return self::$pool[$coursework_id][$key][$value_key][0] ?? false;
+    }
+
+    /**
+     *
+     */
+    protected function post_save_hook() {
+        self::remove_cache($this->courseworkid);
+    }
+
+    /**
+     *
+     */
+    protected function after_destroy() {
+        self::remove_cache($this->courseworkid);
     }
 
 

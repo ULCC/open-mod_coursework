@@ -7,7 +7,7 @@ namespace mod_coursework\auto_grader;
  */
 interface auto_grader {
 
-    public function __construct($coursework, $allocatable, $percentage);
+    public function __construct($coursework, $allocatable);
 
     public function create_auto_grade_if_rules_match();
 }

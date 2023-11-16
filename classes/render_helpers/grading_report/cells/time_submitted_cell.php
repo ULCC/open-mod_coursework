@@ -21,9 +21,17 @@ class time_submitted_cell extends cell_base {
      * @return string
      */
     public function get_table_cell($row_object) {
+
+        $data = $this->prepare_content_cell($row_object);
+
+        return $this->get_new_cell_with_order_data($data);
+    }
+
+    public function prepare_content_cell($row_object) {
         global $OUTPUT, $USER;
 
         $content = '';
+        $time_submitted = $displayeddeadline = 0;
 
         $coursework = $row_object->get_coursework();
         $submission = $row_object->get_submission();
@@ -33,7 +41,7 @@ class time_submitted_cell extends cell_base {
             // If we have groups enabled and this is not the student who submitted the
             // group files, show who did.
             if ($coursework->is_configured_to_have_group_submissions() && !$row_object->has_submission()) {
-                $user = core_user::get_user($submission->userid);
+                $user = user::get_object($submission->userid);
 
                 if ($row_object->can_view_username()) {
                     $content .= "Submitted by";
@@ -88,19 +96,38 @@ class time_submitted_cell extends cell_base {
 
         }
 
-
+        $content .= '<div class="extension-submission">';
+        $allocatableid = $row_object->get_allocatable()->id();
+        $allocatabletype = $row_object->get_allocatable()->type();
+        $coursework = $row_object->get_coursework();
         $new_extension_params = array(
-            'allocatableid' => $row_object->get_allocatable()->id(),
-            'allocatabletype' => $row_object->get_allocatable()->type(),
-            'courseworkid' => $row_object->get_coursework()->id,
+            'allocatableid' => $allocatableid,
+            'allocatabletype' => $allocatabletype,
+            'courseworkid' => $coursework->id,
         );
+
         $extension = deadline_extension::find_or_build($new_extension_params);
         $ability = new ability(user::find($USER), $row_object->get_coursework());
 
         if ($extension->persisted()) {
             $content .= 'Extension: </br>'.userdate($extension->extended_deadline, '%a, %d %b %Y, %H:%M');
+            $displayeddeadline = $extension->extended_deadline;
         }
 
+
+        if($extension->id) {
+            $new_extension_params['id'] = $extension->id;
+        }
+        if($submission) {
+            $new_extension_params['submissionid'] = $submission->id;
+        }
+
+        $deadline = $deadline ?? $coursework->deadline;
+        $content_time = [
+            'time' => date('d-m-Y H:i',$deadline),
+            'time_content' => userdate($deadline),
+            'is_have_deadline' => ($coursework->deadline > 0)? 1 : 0,
+        ];
 
         if ($ability->can('new', $extension) && $coursework->extensions_enabled()) {
             $link = $this->get_router()->get_path('new deadline extension', $new_extension_params);
@@ -108,19 +135,42 @@ class time_submitted_cell extends cell_base {
             $content .= $OUTPUT->action_link($link,
                 $title,
                 null,
-                array('class' => 'new_deadline_extension'));
+                array('class' => 'new_deadline_extension', 'data-name' => $row_object->get_allocatable()->name(), 'data-params' => json_encode($new_extension_params), 'data-time' =>json_encode($content_time) ));
 
         } else if ($ability->can('edit', $extension) && $coursework->extensions_enabled()) {
             $link = $this->get_router()->get_path('edit deadline extension', array('id' => $extension->id));
             $icon = new pix_icon('edit', 'Edit extension', 'coursework');
 
             $content .= $OUTPUT->action_icon($link,
-                                             $icon,
-                                             null,
-                                             array('class' => 'edit_deadline_extension'));
+                $icon,
+                null,
+                array('class' => 'edit_deadline_extension', 'data-name' => $row_object->get_allocatable()->name(), 'data-params' => json_encode($new_extension_params), 'data-time' =>json_encode($content_time)));
         }
 
-        return $this->get_new_cell_with_class($content);
+
+        $content .= '</div>';
+
+        return ['display' => $content, '@data-order' => $this->standardize_time_for_compare($time_submitted) . '|' . $this->standardize_time_for_compare($displayeddeadline)];
+    }
+
+    /**
+     * return 11-char string
+     *
+     * @param $time
+     * @return mixed
+     */
+    private function standardize_time_for_compare($time) {
+        $zerotoadd = 10;
+        if ($time > 1) {
+            $length = ceil(log10($time));
+            $zerotoadd = 11 - $length;
+            $zerotoadd = $zerotoadd < 0 ? 0 : $zerotoadd;
+        }
+        $result = $time;
+        for ($i = 0; $i < $zerotoadd; $i++) {
+            $result = '0' . $result;
+        }
+        return $result;
     }
 
     /**
@@ -134,10 +184,10 @@ class time_submitted_cell extends cell_base {
         $tablename  =   (!empty($options['tablename']))  ? $options['tablename']  : ''  ;
 
         return $this->helper_sortable_heading(get_string('tableheadsubmissiondate', 'coursework'),
-                                              'timesubmitted',
-                                              $options['sorthow'],
-                                              $options['sortby'],
-                                              $tablename);
+            'timesubmitted',
+            $options['sorthow'],
+            $options['sortby'],
+            $tablename);
     }
 
     /**

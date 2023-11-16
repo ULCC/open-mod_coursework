@@ -22,7 +22,8 @@ class personal_deadline_cell extends cell_base {
         global $OUTPUT, $USER;
 
         $coursework = $row_object->get_coursework();
-        $content = userdate($coursework->get_deadline(), '%a, %d %b %Y, %H:%M');
+        $deadline = $coursework->get_deadline();
+        $content = '<div class="show_personal_dealine">';
 
         $new_personal_deadline_params = array(
             'allocatableid' => $row_object->get_allocatable()->id(),
@@ -32,21 +33,28 @@ class personal_deadline_cell extends cell_base {
 
         $personal_deadline = personal_deadline::find_or_build($new_personal_deadline_params);
         if ($personal_deadline->personal_deadline){
-            $content = userdate($personal_deadline->personal_deadline, '%a, %d %b %Y, %H:%M');
+            $deadline = $personal_deadline->personal_deadline;
+        }
+        $date = userdate($deadline, '%a, %d %b %Y, %H:%M');
+        $content .= '<div class="content_personal_deadline">'.$date.'</div>';
+        $ability = new ability(user::find($USER, false), $row_object->get_coursework());
+        $class = 'edit_personal_deadline';
+        if(!$ability->can('edit', $personal_deadline)) {
+            $class .= ' display-none';
         }
 
-        $ability = new ability(user::find($USER), $row_object->get_coursework());
-        if($ability->can('edit', $personal_deadline)) {
-            $link = $this->get_router()->get_path('edit personal deadline', $new_personal_deadline_params);
-            $icon = new pix_icon('edit', 'Edit personal deadline', 'coursework');
+        $link = $this->get_router()->get_path('edit personal deadline', $new_personal_deadline_params);
+        // $link = '/';
+        $icon = new pix_icon('edit', 'Edit personal deadline', 'coursework');
+        $new_personal_deadline_params['multipleuserdeadlines'] = 0;
 
-            $content .= $OUTPUT->action_icon($link,
-                                             $icon,
-                                             null,
-                                             array('class' => 'edit_personal_deadline'));
-        }
+        $content .= $OUTPUT->action_icon($link,
+            $icon,
+            null,
+            array('class' => $class,'data-get' =>json_encode($new_personal_deadline_params), 'data-time' => date('d-m-Y H:i', $deadline) ));
+        $content .= '</div><div class="show_edit_personal_dealine display-none"> </div>';
 
-        return $this->get_new_cell_with_class($content);
+        return $this->get_new_cell_with_order_data(['display' => $content, '@data-order' => $deadline]);
     }
 
     /**
@@ -58,10 +66,10 @@ class personal_deadline_cell extends cell_base {
         $tablename  =   (!empty($options['tablename']))  ? $options['tablename']  : ''  ;
 
         return $this->helper_sortable_heading(get_string('tableheadpersonaldeadline', 'coursework'),
-                                             'personaldeadline',
-                                              $options['sorthow'],
-                                              $options['sortby'],
-                                              $tablename);
+            'personaldeadline',
+            $options['sorthow'],
+            $options['sortby'],
+            $tablename);
     }
 
     /**

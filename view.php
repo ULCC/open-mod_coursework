@@ -54,6 +54,9 @@ $jsmodule = array(
 
 $tiny_mce = new tinymce_texteditor();
 $PAGE->requires->js('/lib/editor/tinymce/tiny_mce/' . $tiny_mce->version . '/tiny_mce.js');
+$PAGE->requires->yui_module('moodle-core-notification', 'notification_init');
+
+
 // Course_module ID, or coursework instance ID - it should be named as the first character of the module.
 $course_module_id = optional_param('id', 0, PARAM_INT);
 $coursework_id = optional_param('e', 0, PARAM_INT);
@@ -70,6 +73,9 @@ $confirm = optional_param('confirm', 0, PARAM_INT);
 $export_grades = optional_param('export', false, PARAM_BOOL);
 $download_grading_sheet = optional_param('export_grading_sheet', false, PARAM_BOOL);
 $group = optional_param('group', -1, PARAM_INT);
+$resettable = optional_param('treset', 0, PARAM_INT);
+$allresettable = optional_param('alltreset', 0, PARAM_INT);
+
 
 
 if (!isset($SESSION->displayallstudents[$course_module_id])) {
@@ -123,6 +129,34 @@ if (!(isset($SESSION->sorthow[$course_module_id]))) {
     $SESSION->sorthow[$course_module_id] = $sorthow;
 }
 
+// first name alpha
+if (!(isset($SESSION->coursework_firstname_alpha[$course_module_id]))) {
+    $SESSION->coursework_firstname_alpha[$course_module_id] = optional_param('coursework_firstname_alpha','',PARAM_ALPHA);
+    $coursework_firstname_alpha = $SESSION->coursework_firstname_alpha[$course_module_id];
+} else {
+    $coursework_firstname_alpha = optional_param('coursework_firstname_alpha', $SESSION->coursework_firstname_alpha[$course_module_id],PARAM_ALPHA);
+    $SESSION->coursework_firstname_alpha[$course_module_id] = $coursework_firstname_alpha;
+}
+
+// last name alpha
+if (!(isset($SESSION->coursework_lastname_alpha[$course_module_id]))) {
+    $SESSION->coursework_lastname_alpha[$course_module_id] =  optional_param('coursework_lastname_alpha','', PARAM_ALPHA);
+    $coursework_lastname_alpha= $SESSION->coursework_lastname_alpha[$course_module_id];
+} else {
+    $coursework_lastname_alpha = optional_param('coursework_lastname_alpha', $SESSION->coursework_lastname_alpha[$course_module_id],PARAM_ALPHA);
+    $SESSION->coursework_lastname_alpha[$course_module_id] = $coursework_lastname_alpha;
+}
+
+// group name alpha
+if (!(isset($SESSION->coursework_groupname_alpha[$course_module_id]))) {
+    $SESSION->coursework_groupname_alpha[$course_module_id] =  optional_param('coursework_groupname_alpha','', PARAM_ALPHA);
+    $coursework_groupname_alpha = $SESSION->coursework_groupname_alpha[$course_module_id];
+} else {
+    $coursework_groupname_alpha= optional_param('coursework_groupname_alpha', $SESSION->coursework_groupname_alpha[$course_module_id],PARAM_ALPHA);
+    $SESSION->coursework_groupname_alpha[$course_module_id] = $coursework_groupname_alpha;
+}
+
+
 
 //we will use the same defaults as page (above) defaulting to page setting if no specific viewallstudents_page has been set
 if (isset($SESSION->viewallstudents_perpage[$course_module_id]) && optional_param('viewallstudents_per_page', 0, PARAM_INT) != $SESSION->viewallstudents_perpage[$course_module_id]
@@ -133,7 +167,7 @@ if (isset($SESSION->viewallstudents_perpage[$course_module_id]) && optional_para
     $SESSION->viewallstudents_page[$course_module_id] =  optional_param('viewallstudents_page', 0, PARAM_INT);
     $viewallstudents_page = $SESSION->viewallstudents_page[$course_module_id];
 } else {
-    $viewallstudents_page = optional_param('viewallstudents_page', $SESSION->page[$course_module_id], PARAM_INT);
+    $viewallstudents_page = optional_param('viewallstudents_page', $SESSION->viewallstudents_page[$course_module_id], PARAM_INT);
     $SESSION->viewallstudents_page[$course_module_id] = $viewallstudents_page;
 }
 
@@ -162,6 +196,33 @@ if (!(isset($SESSION->viewallstudents_sorthow[$course_module_id]))) {
 } else {
     $viewallstudents_sorthow = optional_param('viewallstudents_sorthow', $SESSION->sorthow[$course_module_id], PARAM_ALPHA);
     $SESSION->viewallstudents_sorthow[$course_module_id] = $viewallstudents_sorthow;
+}
+
+// first name alpha
+if (!(isset($SESSION->viewallstudents_firstname_alpha[$course_module_id]))) {
+    $SESSION->viewallstudents_firstname_alpha[$course_module_id] = optional_param('viewallstudents_firstname_alpha','',PARAM_ALPHA);
+    $viewallstudents_firstname_alpha = $SESSION->coursework_firstname_alpha[$course_module_id];
+} else {
+    $viewallstudents_firstname_alpha = optional_param('viewallstudents_firstname_alpha', $SESSION->viewallstudents_firstname_alpha[$course_module_id],PARAM_ALPHA);
+    $SESSION->viewallstudents_firstname_alpha[$course_module_id] = $viewallstudents_firstname_alpha;
+}
+
+// last name alpha
+if (!(isset($SESSION->viewallstudents_lastname_alpha[$course_module_id]))) {
+    $SESSION->viewallstudents_lastname_alpha[$course_module_id] =  optional_param('viewallstudents_lastname_alpha','', PARAM_ALPHA);
+    $viewallstudents_lastname_alpha = $SESSION->viewallstudents_lastname_alpha[$course_module_id];
+} else {
+    $viewallstudents_lastname_alpha = optional_param('viewallstudents_lastname_alpha', $SESSION->viewallstudents_lastname_alpha[$course_module_id],PARAM_ALPHA);
+    $SESSION->viewallstudents_lastname_alpha[$course_module_id] = $viewallstudents_lastname_alpha;
+}
+
+// group name alpha
+if (!(isset($SESSION->viewallstudents_groupname_alpha[$course_module_id]))) {
+    $SESSION->viewallstudents_groupname_alpha[$course_module_id] =  optional_param('viewallstudents_groupname_alpha','', PARAM_ALPHA);
+    $viewallstudents_groupname_alpha = $SESSION->viewallstudents_groupname_alpha[$course_module_id];
+} else {
+    $viewallstudents_groupname_alpha= optional_param('viewallstudents_groupname_alpha', $SESSION->viewallstudents_groupname_alpha[$course_module_id],PARAM_ALPHA);
+    $SESSION->viewallstudents_groupname_alpha[$course_module_id] = $viewallstudents_groupname_alpha;
 }
 
 
@@ -256,7 +317,7 @@ if ($download && $zip_file = $coursework->pack_files()) {
 if ($export_grades){
 
     // headers and data for csv
-    $csv_cells = array('name','username');
+    $csv_cells = array('name','username','idnumber','email');
 
     if ($coursework->personal_deadlines_enabled()){
         $csv_cells[] = 'personaldeadline';
@@ -483,14 +544,38 @@ if ($can_view_students) {
         }
     } else {
 
-        $html .= $page_renderer->teacher_grading_page($coursework, $page, $perpage, $sortby, $sorthow, $group);
-        $html .= $page_renderer->non_teacher_allocated_grading_page($coursework,$viewallstudents_page,$viewallstudents_perpage,$viewallstudents_sortby,$viewallstudents_sorthow,$group,$displayallstudents);
+        if($resettable){
+            $coursework_firstname_alpha = $SESSION->coursework_firstname_alpha[$course_module_id] = "";
+            $coursework_lastname_alpha = $SESSION->coursework_lastname_alpha[$course_module_id] = "";
+            $coursework_groupname_alpha = $SESSION->coursework_groupname_alpha[$course_module_id] = "";
+        }
 
+        if($allresettable){
+            $viewallstudents_firstname_alpha = $SESSION->viewallstudents_firstname_alpha[$course_module_id] = "";
+            $viewallstudents_lastname_alpha = $SESSION->viewallstudents_lastname_alpha[$course_module_id] = "";
+            $viewallstudents_groupname_alpha = $SESSION->viewallstudents_groupname_alpha[$course_module_id] = "";
+        }
+
+        $html .= $page_renderer->teacher_grading_page($coursework, $page, $perpage, $sortby, $sorthow, $group,$coursework_firstname_alpha,$coursework_lastname_alpha,$coursework_groupname_alpha, $resettable);
+        $html .= $page_renderer->non_teacher_allocated_grading_page($coursework,$viewallstudents_page,$viewallstudents_perpage,$viewallstudents_sortby,$viewallstudents_sorthow,$group,$displayallstudents,$viewallstudents_firstname_alpha,$viewallstudents_lastname_alpha,$viewallstudents_groupname_alpha);
+        $html .= $page_renderer->datatables_render($coursework);
+        $html .= $page_renderer->render_modal();
     }
 }
 
 echo $OUTPUT->header();
 echo $html;
+echo '<script src="'.$CFG->wwwroot.'/mod/coursework/datatables/js/jquery-3.3.1.min.js"></script>
+<link rel="stylesheet" type="text/css" href="'. $CFG->wwwroot .'/mod/coursework/datatables/css/datatables.bootstrap.min.css"/>
+    <link rel="stylesheet" type="text/css" href="'. $CFG->wwwroot .'/mod/coursework/datatables/css/jquery.datetimepicker.css"/>
+<script src="'.$CFG->wwwroot.'/mod/coursework/datatables/js/jquery.datatables.js"></script>
+<script src="'.$CFG->wwwroot.'/mod/coursework/datatables/js/datatables.js"></script>
+<script src="'.$CFG->wwwroot.'/mod/coursework/datatables/js/php-date-formatter.min.js"></script>
+<script src="'.$CFG->wwwroot.'/mod/coursework/datatables/js/edit_datatables.js"></script>
+';
+
+//$PAGE->requires->js('/mod/coursework/datatables/js/jquery-3.3.1.min.js');
+//$PAGE->requires->js('/mod/coursework/datatables/js/jquery.datatables.js');
 // Finish the page.
 echo $OUTPUT->footer();
 

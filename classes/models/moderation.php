@@ -125,7 +125,7 @@ class moderation extends table_base{
      * @return user
      */
     public function moderator() {
-        return user::find($this->moderatorid);
+        return user::get_object($this->moderatorid);
     }
 
     /**

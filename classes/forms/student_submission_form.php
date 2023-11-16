@@ -370,7 +370,7 @@ class student_submission_form extends moodleform {
         $file_manager_options = $this->get_file_manager_options();
 
         $usernamehash = $this->get_coursework()->get_username_hash($this->get_submission()->userid);
-        $filerenamestring = get_string('file_rename', 'coursework', $usernamehash);
+        $filerenamestring =  ($this->get_coursework()->renamefiles == 1)? get_string('file_rename', 'coursework', $usernamehash) : "";
         $filerenamestring .= $this->make_plagiarism_instructions();
         $filerenamestring .= html_writer::empty_tag('br');
         if ($file_manager_options['accepted_types'] != '*') {
@@ -387,11 +387,12 @@ class student_submission_form extends moodleform {
      */
     protected function add_header_to_form() {
         $file_manager_options = $this->get_file_manager_options();
-
-        $files_string = ($file_manager_options['maxfiles'] == 1) ? 'yoursubmissionfile_upload'
+        $files_string = ($file_manager_options['maxfiles'] == 1) ? 'yoursubmissionfile'
             : 'yoursubmissionfiles';
+        $renamed = ($this->get_coursework()->renamefiles == 1)?get_string('yoursubmissionfile_renamed', 'coursework') : "";
 
-        $this->_form->addElement('header', 'submitform', get_string($files_string, 'coursework'));
+        $this->_form->addElement('header', 'submitform', get_string($files_string, 'coursework'). $renamed);
+
     }
 
     /**

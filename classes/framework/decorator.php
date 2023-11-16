@@ -61,6 +61,6 @@ class decorator {
      * @return mixed
      */
     public function wrapped_object() {
-        return $this->wrapped_object();
+        return $this->wrapped_object;
     }
 }

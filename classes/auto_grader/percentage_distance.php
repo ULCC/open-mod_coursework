@@ -34,9 +34,9 @@ class percentage_distance implements auto_grader {
      * @param allocatable $allocatable
      * @param int $percentage
      */
-    public function __construct($coursework, $allocatable, $percentage) {
+    public function __construct($coursework, $allocatable) {
         $this->coursework = $coursework;
-        $this->percentage = (int)$percentage;
+        $this->percentage = (int)$this->coursework->automaticagreementrange;
         $this->allocatable = $allocatable;
     }
 

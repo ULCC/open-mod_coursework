@@ -120,26 +120,26 @@ class outstanding_marking   {
 
         global  $DB;
 
-        $sql    =   "     SELECT  *, 
-                                  IF (a.id IS NULL , 0, COUNT(a.id))+1 AS count_samples,
+        $countsamples = 'CASE WHEN a.id = NULL THEN 0 ELSE COUNT(a.id)+1 END';
+        $sql    =   "     SELECT  *,
+                                  $countsamples AS count_samples,
                                   COUNT(a.id) AS ssmID  FROM(
-                                                  SELECT  cs.id AS csid, f.id AS fid, cs.allocatableid ,ssm.id, COUNT(f.id) AS count_feedback,   
+                                                  SELECT  cs.id AS csid, f.id AS fid, cs.allocatableid ,ssm.id, COUNT(f.id) AS count_feedback,
                                                       cs.courseworkid
                                                   FROM {coursework_submissions} cs  LEFT JOIN
-                                                       {coursework_feedbacks} f ON f.submissionid= cs.id 
-                                                  LEFT JOIN {coursework_sample_set_mbrs} ssm 
-                                                  ON  cs.courseworkid = ssm.courseworkid AND cs.allocatableid =ssm.allocatableid    
+                                                       {coursework_feedbacks} f ON f.submissionid= cs.id
+                                                  LEFT JOIN {coursework_sample_set_mbrs} ssm
+                                                  ON  cs.courseworkid = ssm.courseworkid AND cs.allocatableid =ssm.allocatableid
                                                   WHERE cs.courseworkid = :courseworkid
-                                                
-                                                  AND       cs.id NOT IN (SELECT      sub.id  
-                                                          FROM        {coursework_feedbacks} feed 
-                                                          JOIN       {coursework_submissions} sub ON sub.id = feed.submissionid 
-                                     WHERE assessorid = :subassessorid AND sub.courseworkid= :subcourseworkid)  
-                                                  GROUP BY cs.allocatableid, ssm.stage_identifier
-                                                ) a
-                                   GROUP BY a.allocatableid
-                                   HAVING (count_feedback < count_samples  )";
 
+                                                  AND       cs.id NOT IN (SELECT      sub.id
+                                                          FROM        {coursework_feedbacks} feed
+                                                          JOIN       {coursework_submissions} sub ON sub.id = feed.submissionid
+                                     WHERE assessorid = :subassessorid AND sub.courseworkid= :subcourseworkid)
+                                                  GROUP BY cs.allocatableid, ssm.stage_identifier, f.id, cs.id, ssm.id
+                                                ) a
+                                   GROUP BY a.allocatableid, a.csid, a.fid, a.id, a.count_feedback, a.courseworkid
+                                   HAVING (count_feedback < $countsamples  )";
 
         $sqlparams  =   array();
         $sqlparams['subassessorid']             =   $userid;
@@ -192,8 +192,8 @@ class outstanding_marking   {
                                                                         {coursework_feedbacks} feed JOIN 
                                                                         {coursework_submissions} sub ON sub.id = feed.submissionid 
                                                                         WHERE assessorid = :subassessorid AND sub.courseworkid= :subcourseworkid)
-                                          GROUP BY cs.id
-                                          HAVING (count_feedback < :numofmarkers)";
+                                          GROUP BY cs.id, f.id
+                                          HAVING (COUNT(f.id) < :numofmarkers)";
 
 
         $sqlparams['subassessorid']     =   $userid;
@@ -223,7 +223,7 @@ class outstanding_marking   {
                                         AND cs.finalised = 1
                                         AND cs.courseworkid = :courseworkid
                                         GROUP BY cs.id
-                                        HAVING (count_feedback = :numofmarkers)";
+                                        HAVING (COUNT(cs.id) = :numofmarkers)";
 
 
         $sqlparams['numofmarkers'] = $numberofmarkers;
@@ -242,21 +242,21 @@ class outstanding_marking   {
 
         global  $DB;
 
-        $sql        =   "SELECT  *, 
-                                  IF (a.id IS NULL , 0, COUNT(a.id))+1 AS count_samples,
+        $countsamples = 'CASE WHEN a.id = NULL THEN 0 ELSE COUNT(a.id)+1 END';
+        $sql        =   "SELECT  *,
+                                  $countsamples AS count_samples,
                                    COUNT(a.id) AS ssmID  FROM(
-                                                  SELECT f.id AS fid, cs.id AS csid, cs.allocatableid ,ssm.id, COUNT(f.id) AS count_feedback,   
+                                                  SELECT f.id AS fid, cs.id AS csid, cs.allocatableid ,ssm.id, COUNT(f.id) AS count_feedback,
                                                       cs.courseworkid
-                                                  FROM mdl_coursework_submissions cs  LEFT JOIN
-                                                       mdl_coursework_feedbacks f ON f.submissionid= cs.id 
-                                                  LEFT JOIN `mdl_coursework_sample_set_mbrs` ssm 
-                                                  ON  cs.courseworkid = ssm.courseworkid AND cs.allocatableid =ssm.allocatableid    
+                                                  FROM {coursework_submissions} cs  LEFT JOIN
+                                                       {coursework_feedbacks} f ON f.submissionid= cs.id
+                                                  LEFT JOIN {coursework_sample_set_mbrs} ssm
+                                                  ON  cs.courseworkid = ssm.courseworkid AND cs.allocatableid =ssm.allocatableid
                                                   WHERE cs.courseworkid = :courseworkid
-                                                  GROUP BY cs.allocatableid, ssm.stage_identifier
+                                                  GROUP BY cs.allocatableid, ssm.stage_identifier, f.id, cs.id, ssm.id
                                                 ) a
-                                   GROUP BY a.allocatableid
-                                   HAVING (count_feedback = count_samples AND count_samples > 1 );";
-
+                                   GROUP BY a.allocatableid, a.csid, a.fid, a.id, a.count_feedback, a.courseworkid
+                                   HAVING (count_feedback = $countsamples AND $countsamples > 1 );";    
 
         $sqlparams['courseworkid'] = $courseworkid;
 

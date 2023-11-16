@@ -208,7 +208,8 @@ class feedback extends table_base {
     public function get_assesor_username() {
 
         if (!$this->firstname && !empty($this->lasteditedbyuser)) {
-            $this->assessor = core_user::get_user($this->lasteditedbyuser);
+            //$this->assessor = core_user::get_user($this->lasteditedbyuser);
+            $this->assessor = user::get_object($this->lasteditedbyuser);
         }
 
         return fullname($this->assessor);
@@ -472,7 +473,12 @@ class feedback extends table_base {
     public function get_submission() {
 
         if (!isset($this->submission) && !empty($this->submissionid)) {
-            $this->submission = submission::find($this->submissionid);
+            global $DB;
+            $coursework_id = $this->courseworkid ?? $DB->get_field(submission::$table_name, 'courseworkid', ['id' => $this->submissionid], MUST_EXIST);
+            if (!isset(submission::$pool[$coursework_id])) {
+                submission::fill_pool_coursework($coursework_id);
+            }
+            $this->submission = submission::$pool[$coursework_id]['id'][$this->submissionid] ?? false;
         }
 
         return $this->submission;
@@ -546,7 +552,7 @@ class feedback extends table_base {
      * @return user
      */
     public function assessor() {
-        return user::find($this->assessorid);
+        return user::get_object($this->assessorid);
     }
 
     /**
@@ -565,6 +571,108 @@ class feedback extends table_base {
 
     public function is_assessor_anonymity_enabled(){
         return $this->get_coursework()->assessoranonymity;
+    }
+
+    /**
+     * cache array
+     *
+     * @var
+     */
+    public static $pool;
+
+    /**
+     *
+     * @param $coursework_id
+     * @throws \dml_exception
+     */
+    public static function fill_pool_coursework($coursework_id) {
+        global $DB;
+        if (isset(self::$pool[$coursework_id])) {
+            return;
+        }
+        if (submission::$pool[$coursework_id]) {
+            $submission_ids = submission::$pool[$coursework_id]['id'];
+        } else {
+            $submission_ids = $DB->get_records(submission::$table_name, ['courseworkid' => $coursework_id], '', 'id');
+        }
+        self::fill_pool_submissions($coursework_id, array_keys($submission_ids));
+    }
+
+    /**
+     * @param $coursework_id
+     * @param $submission_ids
+     */
+    public static function fill_pool_submissions($coursework_id, $submission_ids) {
+        global $DB;
+
+        if (isset(self::$pool[$coursework_id])) {
+            return;
+        }
+
+        $key = self::$table_name;
+        $cache = \cache::make('mod_coursework', 'courseworkdata', ['id' => $coursework_id]);
+
+        $data = $cache->get($key);
+        if ($data === false) {
+            $data = [
+                'id' => [],
+                'submissionid-stage_identifier' => [],
+                'submissionid-stage_identifier_index' => [],
+                'submissionid-finalised' => [],
+                'submissionid-ismoderation-isfinalgrade-stage_identifier' => [],
+                'submissionid-assessorid' => [],
+                'submissionid' => []
+            ];
+            if ($submission_ids) {
+                list($submission_id_sql, $submission_id_params) = $DB->get_in_or_equal($submission_ids, SQL_PARAMS_NAMED);
+                $feedbacks = $DB->get_records_sql("SELECT * FROM {coursework_feedbacks} WHERE submissionid $submission_id_sql", $submission_id_params);
+                foreach ($feedbacks as $record) {
+                    $object = new self($record);
+                    $stage_identifier = $record->stage_identifier;
+                    $stage_identifier_index = ($stage_identifier == 'final_agreed_1') ? $stage_identifier : 'others';
+                    $data['id'][$record->id] = $object;
+                    $data['submissionid-stage_identifier'][$record->submissionid . '-' . $stage_identifier][] = $object;
+                    $data['submissionid-stage_identifier_index'][$record->submissionid . '-' . $stage_identifier_index][] = $object;
+                    $data['submissionid-finalised'][$record->submissionid . '-' . $record->finalised][] = $object;
+                    $data['submissionid-ismoderation-isfinalgrade-stage_identifier'][$record->submissionid . '-' . $record->ismoderation . '-' . $record->isfinalgrade . '-' . $stage_identifier][] = $object;
+                    $data['submissionid-assessorid'][$record->submissionid . '-' . $record->assessorid][] = $object;
+                    $data['submissionid'][$record->submissionid][] = $object;
+                }
+            }
+            $cache->set($key, $data);
+        }
+        self::$pool[$coursework_id] = $data;
+    }
+
+    /**
+     *
+     * @param $coursework_id
+     * @param $key
+     * @param $params
+     * @return bool
+     */
+    public static function get_object($coursework_id, $key, $params) {
+        if (!isset(self::$pool[$coursework_id])) {
+            self::fill_pool_coursework($coursework_id);
+        }
+        $value_key = implode('-', $params);
+        return self::$pool[$coursework_id][$key][$value_key][0] ?? false;
+    }
+
+    /**
+     *
+     */
+    protected function post_save_hook() {
+        $courseworkid = $this->get_submission()->courseworkid;
+        self::remove_cache($courseworkid);
+    }
+
+    /**
+     *
+     */
+    protected function after_destroy() {
+        $courseworkid = $this->get_submission()->courseworkid;
+        self::remove_cache($courseworkid);
     }
 }
 

@@ -118,6 +118,42 @@ abstract class grading_table_row_base implements user_row {
     }
 
     /**
+     * Will return the idnumber if permissions allow, otherwise, an anonymous placeholder.
+     *
+     * @throws \coding_exception
+     * @return string
+     */
+    public function get_idnumber() {
+        global $DB;
+
+        $viewanonymous = has_capability('mod/coursework:viewanonymous', $this->get_coursework()->get_context());
+        if (!$this->get_coursework()->blindmarking || $viewanonymous || $this->is_published()) {
+            $user = $DB->get_record('user', array('id' => $this->get_allocatable_id()));
+            return $user->idnumber;
+        } else {
+            return get_string('hidden', 'mod_coursework');
+        }
+    }
+
+    /**
+     * Will return the email if permissions allow, otherwise, an anonymous placeholder.
+     *
+     * @throws \coding_exception
+     * @return string
+     */
+    public function get_email() {
+        global $DB;
+
+        $viewanonymous = has_capability('mod/coursework:viewanonymous', $this->get_coursework()->get_context());
+        if (!$this->get_coursework()->blindmarking || $viewanonymous || $this->is_published()) {
+            $user = $DB->get_record('user', array('id' => $this->get_allocatable_id()));
+            return $user->email;
+        } else {
+            return '';
+        }
+    }
+
+    /**
      * Returns the id of the student who's submission this is
      *
      * @return mixed
@@ -202,13 +238,10 @@ abstract class grading_table_row_base implements user_row {
     public function get_submission() {
 
         if (!isset($this->submission)) {
-
-            $params = array(
-                'courseworkid' => $this->get_coursework_id(),
-                'allocatableid' => $this->get_allocatable()->id(),
-                'allocatabletype' => $this->get_allocatable()->type(),
-            );
-            $this->submission = submission::find($params);
+            $allocatableid = $this->get_allocatable()->id();
+            $allocatabletype = $this->get_allocatable()->type();
+            $params = [$allocatableid, $allocatabletype];
+            $this->submission = submission::get_object($this->get_coursework_id(), 'allocatableid-allocatabletype', $params);
         }
 
         return $this->submission;
@@ -359,6 +392,66 @@ abstract class grading_table_row_base implements user_row {
      */
     public function get_single_feedback(){
         return $this->get_submission()->get_assessor_feedback_by_stage('assessor_1');
+    }
+
+
+    /**
+     * Check if the extension is given to this row
+     *
+     * @return bool
+     */
+
+    public function has_extension() {
+
+        global $DB;
+        return $DB->record_exists('coursework_extensions', array('courseworkid' => $this->get_coursework()->id,
+                                                                      'allocatableid' => $this->get_allocatable()->id(),
+                                                                      'allocatabletype'=>  $this->get_allocatable()->type()));
+
+    }
+
+
+    /**
+     * Getter for row extension
+     *
+     * @return mixed
+
+     */
+    public function get_extension() {
+        global $DB;
+        return $DB->get_record('coursework_extensions', array('courseworkid' => $this->get_coursework()->id,
+                                                                   'allocatableid' => $this->get_allocatable()->id(),
+                                                                   'allocatabletype'=>  $this->get_allocatable()->type()));
+    }
+
+    public function get_user_firstname() {
+        /**
+         * @var user $user
+         */
+        $user = $this->get_allocatable();
+
+        $viewanonymous = has_capability('mod/coursework:viewanonymous', $this->get_coursework()->get_context());
+        if (!$this->get_coursework()->blindmarking || $viewanonymous || $this->is_published() ) {
+            return $user->firstname;
+        }
+        else {
+            return get_string('hidden', 'mod_coursework');
+        }
+    }
+
+    public function get_user_lastname() {
+        /**
+         * @var user $user
+         */
+        $user = $this->get_allocatable();
+
+        $viewanonymous = has_capability('mod/coursework:viewanonymous', $this->get_coursework()->get_context());
+        if (!$this->get_coursework()->blindmarking || $viewanonymous || $this->is_published()) {
+            return $user->lastname;
+        }
+        else {
+            return get_string('hidden', 'mod_coursework');
+        }
     }
 
 }

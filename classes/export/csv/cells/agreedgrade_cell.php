@@ -22,7 +22,7 @@ class agreedgrade_cell extends cell_base{
     public function get_cell($submission, $student, $stage_identifier){
 
         $agreedgrade = $submission->get_agreed_grade();
-        if($this->coursework->is_using_rubric()){
+        if($this->coursework->is_using_rubric() && $this->coursework->finalstagegrading != 1){
             $gradedata = array();
             $this->get_rubric_scores_gradedata($agreedgrade, $gradedata); // multiple parts are handled here
         } else {
@@ -39,7 +39,7 @@ class agreedgrade_cell extends cell_base{
      */
     public function get_header($stage){
 
-        if ($this->coursework->is_using_rubric()) {
+        if ($this->coursework->is_using_rubric() && $this->coursework->finalstagegrading != 1) {
             $strings = array();
             $criterias = $this->coursework->get_rubric_criteria();
             foreach ($criterias as $criteria) { // rubrics can have multiple parts, so let's create header for each of it
@@ -68,7 +68,7 @@ class agreedgrade_cell extends cell_base{
 
             $errormsg   =   '';
 
-            if (!$this->coursework->is_using_rubric()) {
+            if (!$this->coursework->is_using_rubric() || ($this->coursework->is_using_rubric() && $this->coursework->finalstagegrading == 1)) {
                 $gradejudge = new grade_judge($this->coursework);
                 if (!$gradejudge->grade_in_scale($value)){
                     $errormsg = get_string('valuenotincourseworkscale', 'coursework');
@@ -224,7 +224,7 @@ class agreedgrade_cell extends cell_base{
     function    get_rubrics($coursework,$csv_cells)        {
 
 
-        if ($coursework->is_using_rubric()) {
+        if ($coursework->is_using_rubric()  && $this->coursework->finalstagegrading != 1) {
 
             $rubricheaders      =       array();
 

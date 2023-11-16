@@ -12,6 +12,7 @@ use mod_coursework\models\moderation;
 use mod_coursework\models\plagiarism_flag;
 use mod_coursework\router;
 use mod_coursework\warnings;
+use mod_coursework\models\group;
 
 /**
  * Makes the pages
@@ -21,18 +22,21 @@ class mod_coursework_page_renderer extends plugin_renderer_base {
     /**
      * @param feedback $feedback
      */
-    public function show_feedback_page($feedback) {
+    public function show_feedback_page($feedback,$ajax) {
         global $OUTPUT;
 
         $html = '';
 
         $object_renderer = $this->get_object_renderer();
-        $html .= $object_renderer->render_feedback($feedback);
 
-        echo $OUTPUT->header();
-        echo $html;
-        echo $OUTPUT->footer();
+
+        if (empty($ajax))  $html .=  $OUTPUT->header();
+        $html .= $object_renderer->render_feedback($feedback);
+        if (empty($ajax)) $html .=  $OUTPUT->header();
+
+        return $html;
     }
+
 
     /**
      * @param moderation $moderation
@@ -58,7 +62,7 @@ class mod_coursework_page_renderer extends plugin_renderer_base {
      * @param $assessor
      * @param $editor
      */
-    public function edit_feedback_page(feedback $teacher_feedback, $assessor, $editor) {
+    public function edit_feedback_page(feedback $teacher_feedback, $assessor, $editor, $ajax = false) {
 
         global $PAGE, $SITE, $OUTPUT;
 
@@ -108,9 +112,40 @@ class mod_coursework_page_renderer extends plugin_renderer_base {
 
         $simple_form->set_data($teacher_feedback);
 
+        if ($ajax) {
+            $formhtml = $simple_form->render();
+            $filemanageroptions = $simple_form->get_file_options();
+            $editoroptions = $simple_form->get_editor_options();
+
+            $commentoptions = $this->get_comment_options($simple_form);
+            echo json_encode(['formhtml' => $html . $formhtml, 'filemanageroptions' => $filemanageroptions, 'editoroptions' => $editoroptions, 'commentoptions' => $commentoptions]);
+
+        } else {
+            $PAGE->set_pagelayout('standard');
+            $PAGE->navbar->add($grading_title);
+            $PAGE->set_title($SITE->fullname);
+            $PAGE->set_heading($SITE->fullname);
+            echo $OUTPUT->header();
+            echo $html;
+            $simple_form->display();
+            echo $OUTPUT->footer();
+        }
+    }
+
+    public function confirm_feedback_removal_page(feedback $teacher_feedback, $confirmurl)     {
+        global $PAGE, $SITE, $OUTPUT;
+
+        $grading_title =
+            get_string('gradingfor', 'coursework', $teacher_feedback->get_submission()->get_allocatable_name());
+
+        $PAGE->set_pagelayout('standard');
+        $PAGE->navbar->add($grading_title);
+        $PAGE->set_title($SITE->fullname);
+        $PAGE->set_heading($SITE->fullname);
+
+
         echo $OUTPUT->header();
-        echo $html;
-        $simple_form->display();
+        echo $OUTPUT->confirm(get_string('confirmremovefeedback', 'mod_coursework'), $confirmurl, $PAGE->url);
         echo $OUTPUT->footer();
     }
 
@@ -287,10 +322,11 @@ class mod_coursework_page_renderer extends plugin_renderer_base {
     }
 
     /**
-     * @param feedback $new_feedback
+     * @param $new_feedback
+     * @param bool $ajax
      * @throws coding_exception
      */
-    public function new_feedback_page($new_feedback) {
+    public function new_feedback_page($new_feedback , $ajax = false) {
         global $PAGE, $OUTPUT, $SITE, $DB;
 
         $submission = $new_feedback->get_submission();
@@ -349,11 +385,57 @@ class mod_coursework_page_renderer extends plugin_renderer_base {
             $simple_form->set_data($teacher_feedback);
         }
 
-        echo $OUTPUT->header();
-        echo $html;
-        $simple_form->display();
-        echo $OUTPUT->footer();
+        if ($ajax) {
+            $formhtml = $simple_form->render();
+            $filemanageroptions = $simple_form->get_file_options();
+            $editoroptions = $simple_form->get_editor_options();
+
+            $commentoptions = $this->get_comment_options($simple_form);
+            echo json_encode(['formhtml' => $html . $formhtml, 'filemanageroptions' => $filemanageroptions, 'editoroptions' => $editoroptions, 'commentoptions' => $commentoptions]);
+
+
+        } else {
+            $PAGE->set_pagelayout('standard');
+            $PAGE->navbar->add($grading_title);
+            $PAGE->set_title($SITE->fullname);
+            $PAGE->set_heading($SITE->fullname);
+            echo $OUTPUT->header();
+            echo $html;
+            $simple_form->display();
+            echo $OUTPUT->footer();
+        }
     }
+
+
+
+    /**
+     *
+     * @param $simple_form
+     * @return array
+     */
+    private function get_comment_options($simple_form) {
+        $gradingform_guide_controller = $simple_form->get_grading_controller();
+
+        if (!$gradingform_guide_controller) {
+            return null;
+        }
+        $definition = $gradingform_guide_controller->get_definition();
+        if (!property_exists($definition, 'guide_comments')) {
+            return null;
+        }
+        $comments = $definition->guide_comments;
+
+        $commentoptions = [];
+        foreach ($comments as $id => $comment) {
+            $commentoption = new stdClass();
+            $commentoption->id = $id;
+            $commentoption->description = $comment['description'];
+            $commentoptions[] = $commentoption;
+        }
+        return $commentoptions;
+    }
+
+
 
     /**
      * @param moderation $new_moderation
@@ -474,24 +556,21 @@ class mod_coursework_page_renderer extends plugin_renderer_base {
     }
 
 
-
-
-
-
-
-
-
     /**
      * @param coursework $coursework
-     * @param int $page
-     * @param int $perpage
+     * @param $page
+     * @param $perpage
      * @param $sortby
      * @param $sorthow
+     * @param $group
+     * @param $firstnamealpha
+     * @param $lastnamealpha
+     * @param $groupnamealpha
      * @return string
      * @throws coding_exception
      * @throws moodle_exception
      */
-    public function teacher_grading_page($coursework, $page, $perpage, $sortby, $sorthow, $group) {
+    public function teacher_grading_page($coursework, $page, $perpage, $sortby, $sorthow, $group, $firstnamealpha, $lastnamealpha, $groupnamealpha) {
 
         global $PAGE, $OUTPUT;
 
@@ -502,10 +581,14 @@ class mod_coursework_page_renderer extends plugin_renderer_base {
         $report_options['page'] = $page;
         $report_options['group'] = $group;
         $report_options['perpage'] = $perpage;
+        $report_options['mode'] =   2; //load first number of records specified by perpage first
         $report_options['sortby'] = $sortby;
         $report_options['sorthow'] = $sorthow;
         $report_options['showsubmissiongrade'] = false;
         $report_options['showgradinggrade'] = false;
+        $report_options['firstnamealpha'] = $firstnamealpha;
+        $report_options['lastnamealpha'] = $lastnamealpha;
+        $report_options['groupnamealpha'] = $groupnamealpha;
 
         $grading_report = $coursework->renderable_grading_report_factory($report_options);
         $grading_sheet = new \mod_coursework\export\grading_sheet($coursework, null, null);
@@ -529,7 +612,25 @@ class mod_coursework_page_renderer extends plugin_renderer_base {
         $params = $PAGE->url->params();
         $links = array();
 
-        if ($coursework->get_finalised_submissions() && !empty($grading_report->get_table_rows_for_page())
+        // display 'Group mode' with the relevant groups
+        $currenturl = new moodle_url('/mod/coursework/view.php', array('id' => $coursework->get_course_module()->id));
+        $html .= groups_print_activity_menu($coursework->get_course_module(), $currenturl->out(), true);
+        if (groups_get_activity_groupmode($coursework->get_course_module()) != 0 && $group != 0) {
+            $html .= '<div class="alert">'.get_string('groupmodechosenalert','mod_coursework').'</div>';
+        }
+
+        // reset table preferences
+        if($firstnamealpha || $lastnamealpha || $groupnamealpha) {
+            $url = new moodle_url('/mod/coursework/view.php', array('id' => $coursework->get_course_module()->id, 'treset' => 1));
+
+            $html .= html_writer::start_div('mdl-right');
+            $html .= html_writer::link($url, get_string('resettable'));
+            $html .= html_writer::end_div();
+        }
+
+
+        $finalised_submissions = submission::$pool[$coursework->id]['finalised'][1] ?? [];
+        if ($finalised_submissions && !empty($grading_report->get_table_rows_for_page())
             && !empty($submissions)) {
 
             $url = $pageurl.'&download=1';
@@ -570,45 +671,19 @@ class mod_coursework_page_renderer extends plugin_renderer_base {
             $html .= $this->render($gradingactions);;
         }
 
-        // display 'Group mode' with the relevant groups
-        $currenturl = new moodle_url('/mod/coursework/view.php', array('id' => $coursework->get_course_module()->id));
-        $html .= groups_print_activity_menu($coursework->get_course_module(), $currenturl->out(), true);
-        if (groups_get_activity_groupmode($coursework->get_course_module()) != 0 && $group != 0) {
-            $html .= '<div class="alert">'.get_string('groupmodechosenalert','mod_coursework').'</div>';
+        if($firstnamealpha || $lastnamealpha || $groupnamealpha || $group != -1) {
+            $html .= $warnings->filters_warning();
         }
 
 
-
-        $paging_bar = new paging_bar($grading_report->get_participant_count(), $page, $perpage,
-                                     $pageurl, 'page');
-
-        $there_are_any_students = $grading_report->get_participant_count() > 0;
-
-        if ($there_are_any_students) {
-
-            $records_per_page = array(3 => 3,
-                                      10 => 10,
-                                      20 => 20,
-                                      30 => 30,
-                                      40 => 40,
-                                      50 => 50,
-                                      100 => 100);
-            // TODO this seems redundant (params). Test now they are removed.
-            $single_select_params = compact('sortby', 'sorthow', 'page');
-            $single_select_params['page'] = '0';
-            $select = new single_select($pageurl, 'per_page', $records_per_page, $perpage, null);
-            $select->label = get_string('records_per_page', 'coursework');
-            $select->class = 'jumpmenu';
-            $select->formid = 'sectionmenu';
-            $html .= $OUTPUT->render($select);
-        }
 
         /**
          * @var mod_coursework_grading_report_renderer $grading_report_renderer
          */
 
-        $html .= $grading_report_renderer->render_grading_report($grading_report);
-        $html .= $this->get_object_renderer()->render($paging_bar);
+        $html .= html_writer::start_tag('div', array('class' => 'wrapper_table_submissions'));
+        $html .= $grading_report_renderer->render_grading_report($grading_report, $coursework->has_multiple_markers());
+        $html .= html_writer::end_tag('div');
 
         // Publish button if appropriate.
         if ($coursework->has_stuff_to_publish() && has_capability('mod/coursework:publish', $PAGE->context)) {
@@ -622,7 +697,22 @@ class mod_coursework_page_renderer extends plugin_renderer_base {
         return $html;
     }
 
-    public function non_teacher_allocated_grading_page($coursework,$viewallstudents_page,$viewallstudents_perpage,$viewallstudents_sortby,$viewallstudents_sorthow,$group,$displayallstudents=0) {
+    /**
+     * @param $coursework
+     * @param $viewallstudents_page
+     * @param $viewallstudents_perpage
+     * @param $viewallstudents_sortby
+     * @param $viewallstudents_sorthow
+     * @param $group
+     * @param int $displayallstudents
+     * @param $firstnamealpha
+     * @param $lastnamealpha
+     * @param $groupnamealpha
+     * @return string
+     * @throws coding_exception
+     * @throws moodle_exception
+     */
+    public function non_teacher_allocated_grading_page($coursework,$viewallstudents_page,$viewallstudents_perpage,$viewallstudents_sortby,$viewallstudents_sorthow,$group,$displayallstudents=0,$firstnamealpha,$lastnamealpha,$groupnamealpha) {
 
         global $PAGE, $OUTPUT;
 
@@ -643,6 +733,9 @@ class mod_coursework_page_renderer extends plugin_renderer_base {
             $report_options['unallocated'] = true;
             $report_options['showsubmissiongrade'] = false;
             $report_options['showgradinggrade'] = false;
+            $report_options['firstnamealpha'] = $firstnamealpha;
+            $report_options['lastnamealpha'] = $lastnamealpha;
+            $report_options['groupnamealpha'] = $groupnamealpha;
 
             $grading_report = $coursework->renderable_grading_report_factory($report_options);
 
@@ -668,35 +761,22 @@ class mod_coursework_page_renderer extends plugin_renderer_base {
                 $html .= $grading_report_renderer->submissions_header(get_string('submissionnotallocatedtoassessor', 'coursework'));
 
 
-                $paging_bar = new paging_bar($grading_report->get_participant_count(), $viewallstudents_page, $viewallstudents_perpage,
-                    $pageurl, 'viewallstudents_page');
-
-
-                if ($any_unallocated_students) {
-
-                    $records_per_page = array(3 => 3,
-                        10 => 10,
-                        20 => 20,
-                        30 => 30,
-                        40 => 40,
-                        50 => 50,
-                        100 => 100);
-                    // TODO this seems redundant (params). Test now they are removed.
-                    $single_select_params = compact('sortby', 'sorthow', 'page');
-                    $single_select_params['page'] = '0';
-                    $select = new single_select($pageurl, 'viewallstudents_per_page', $records_per_page, $viewallstudents_perpage, null);
-                    $select->label = get_string('records_per_page', 'coursework');
-                    $select->class = 'jumpmenu';
-                    $select->formid = 'sectionmenu';
-                    $html .= $OUTPUT->render($select);
-                }
-
                 /**
                  * @var mod_coursework_grading_report_renderer $grading_report_renderer
                  */
 
-                $html .= $grading_report_renderer->render_grading_report($grading_report);
-                $html .= $this->get_object_renderer()->render($paging_bar);
+                $html .= html_writer::start_tag('div', array('class' => 'wrapper_table_submissions'));
+                $html .= $grading_report_renderer->render_grading_report($grading_report,$coursework->has_multiple_markers(),true);
+                $html .= html_writer::end_tag('div');
+
+
+
+
+
+
+                /**
+                 * @var mod_coursework_grading_report_renderer $grading_report_renderer
+                 */
             }
         }
         return $html;
@@ -1211,7 +1291,7 @@ class mod_coursework_page_renderer extends plugin_renderer_base {
             }
             $html .= html_writer::end_tag('p');
         } else {
-            $html .= get_string('noerrorsfound', 'mod_coursework');
+            $html .= get_string('noallocationerrorsfound', 'mod_coursework');
         }
 
         $html .= html_writer::tag('p',html_writer::link('/mod/coursework/view.php?id='.$PAGE->cm->id, get_string('continuetocoursework', 'coursework')));
@@ -1288,5 +1368,303 @@ class mod_coursework_page_renderer extends plugin_renderer_base {
         return $html;
 
     }
+    /**
+     * View a summary listing of all courseworks in the current course.
+     *
+     * @return string
+     */
+    function view_course_index($courseid) {
+        global $CFG, $DB, $USER;
+        $o = '';
+        $course = $DB->get_record('course', array('id'=>$courseid));
+        $strplural = get_string('modulenameplural', 'assign');
+        if (!$cms = get_coursemodules_in_course('coursework', $course->id, 'm.deadline')) {
+            $o .= $this->get_renderer()->notification(get_string('thereareno', 'moodle', $strplural));
+            $o .= $this->get_renderer()->continue_button(new moodle_url('/course/view.php', array('id' => $course->id)));
+            return $o;
+        }
+        $usesections = course_format_uses_sections($course->format);
+        $modinfo = get_fast_modinfo($course);
+        if ($usesections) {
+            $sections = $modinfo->get_section_info_all();
+        }
+        $table = new html_table();
+        // table headers
+        $format_name = course_get_format($course)->get_format();
+        $table->head  = array (ucfirst($format_name), 'Courseworks', 'Deadline', 'Submission', 'Grade');
+
+        $currentsection = '';
+        $printsection = '';
+        foreach ($modinfo->instances['coursework'] as $cm) {
+            if (!$cm->uservisible) {
+                continue;
+            }
+            $coursework = coursework::find($cm->instance);
+            $sectionname = '';
+            if ($usesections && $cm->sectionnum) {
+                $sectionname = get_section_name($course, $sections[$cm->sectionnum]);
+                if ($sectionname !== $currentsection) {
+                    if ($sectionname) {
+                        $printsection = $sectionname;
+                    }
+                    $currentsection = $sectionname;
+                } else {
+                    $printsection = '';
+                }
+            }
+
+            $submitted = '';
+            $timedue = ($coursework->deadline)? date('l, d F Y, h:i A', $coursework->deadline) : "No deadline";
+            if ($coursework->can_grade()) { // teachers
+                $submitted = count($coursework->get_all_submissions());
+            } else if ($coursework->can_submit()) { //students
+                if($coursework->use_groups){
+                    $allocatable = $coursework->get_student_group($USER);
+                } else {
+                    $allocatable = $USER;
+                    $allocatable = user::find($allocatable);
+                }
+                if ($allocatable) {
+                    $timedue = $coursework->get_allocatable_deadline($allocatable->id); // get deadline based on user taking into considerations personal deadline and extension
+                    $timedue = ($timedue)? date('l, d F Y, h:i A', $timedue) : "No deadline";
+                    $usersubmission = $coursework->get_user_submission($allocatable);
+                    if ($usersubmission) {
+                        $submitted = $usersubmission->get_status_text();
+                    } else {
+                        $submitted = get_string('statusnotsubmitted', 'coursework');
+                    }
+                } else { // message that student is not in the group
+                    $submitted = "Not in group, can't submit";
+                }
+            }
+            $gradinginfo = grade_get_grades($course->id, 'mod', 'coursework', $cm->instance, $USER->id);
+            if (isset($gradinginfo->items[0]->grades[$USER->id]) &&
+                !$gradinginfo->items[0]->grades[$USER->id]->hidden ) {
+                $grade = $gradinginfo->items[0]->grades[$USER->id]->str_grade;
+            } else {
+                $grade = '-';
+            }
+            $url = $CFG->wwwroot.'/mod/coursework/view.php';
+            $link = "<a href=\"{$url}?id={$coursework->coursemodule->id}\">{$coursework->name}</a>";
+            $table->data[]  =  array(//'cmid'=>$cm->id,
+                'sectionname'=>$printsection,
+                'cmname'=>$link,
+                'timedue'=>$timedue,
+                'submissioninfo'=>$submitted,
+                'gradeinfo'=>$grade);
+        }
+        $o =  html_writer::table($table);
+        return $o;
+    }
+
+    public function datatables_render($coursework){
+        global $CFG;
+
+        $lang_messages = [
+            'notification_yes_label' => get_string('notification_yes_label', 'mod_coursework'),
+            'notification_no_label' => get_string('notification_no_label', 'mod_coursework'),
+            'notification_confirm_label' => get_string('notification_confirm_label', 'mod_coursework'),
+            'notification_info' => str_replace(' ', '_', get_string('notification_info', 'mod_coursework')),
+            'notification_leave_form_message' => str_replace(' ', '_', get_string('notification_leave_form_message', 'mod_coursework')),
+            'notification_leave_form_title' => str_replace(' ', '_', get_string('notification_leave_form_title', 'mod_coursework')),
+            'alert_extension_save_successful' => str_replace(' ', '_', get_string('alert_extension_save_successful', 'mod_coursework')),
+            'alert_no_extension' => str_replace(' ', '_', get_string('alert_no_extension', 'mod_coursework')),
+            'alert_personaldeadline_save_successful' => str_replace(' ', '_', get_string('alert_personaldeadline_save_successful', 'mod_coursework')),
+            'alert_validate_deadline' => str_replace(' ', '_', get_string('alert_validate_deadline', 'mod_coursework')),
+            'url_root' => $CFG->wwwroot,
+            'alert_feedback_save_successful'=>str_replace(' ', '_', get_string('alert_feedback_save_successful', 'mod_coursework')),
+            'alert_feedback_remove_successful'=>str_replace(' ', '_', get_string('alert_feedback_remove_successful', 'mod_coursework')),
+            'alert_request_error'=>str_replace(' ', '_', get_string('alert_request_error', 'mod_coursework')),
+            'alert_feedback_draft_save_successful' => str_replace(' ', '_', get_string('alert_feedback_draft_save_successful', 'mod_coursework'))
+        ];
+
+        $modal_header = html_writer::tag('h5','new Extension', array(
+            'class' => 'modal-title',
+            'id'    =>  'extension-modal-title',
+        ));
+        $modal_header .= html_writer::start_tag('button', array(
+            'type' => 'button',
+            'class' => 'close btn-extension-close',
+            'aria-label' => 'Close',
+            'data-dismiss' => 'modal'
+        ));
+        $modal_header .= html_writer::span('&times;','',array('aria-hidden'=>'true'));
+        $modal_header .= html_writer::end_tag('button');
+
+        $modal_body = html_writer::start_tag('form', array('id'=>'form-extension'));
+        $content = html_writer::empty_tag('input',array(
+            'name'=>'allocatabletype',
+            'type'=>'hidden',
+            'value'=>'',
+            'id'=>'extension-allocatabletype'
+        ));
+        $content .= html_writer::empty_tag('input',array(
+            'name'=>'allocatableid',
+            'type'=>'hidden',
+            'value'=>'',
+            'id'=>'extension-allocatableid'
+        ));
+        $content .= html_writer::empty_tag('input',array(
+            'name'=>'courseworkid',
+            'type'=>'hidden',
+            'value'=>'',
+            'id'=>'extension-courseworkid'
+        ));
+        $content .= html_writer::empty_tag('input',array(
+            'name'=>'id',
+            'type'=>'hidden',
+            'value'=>'',
+            'id'=>'extension-id'
+        ));
+        $content .= html_writer::empty_tag('input',array(
+            'name'=>'submissionid',
+            'type'=>'hidden',
+            'value'=>'',
+            'id'=>'extension-submissionid'
+        ));
+        $content .= html_writer::empty_tag('input',array(
+            'name'=>'name',
+            'type'=>'hidden',
+            'id'=>'extension-name',
+            'value'=>'',
+        ));
+        $content .= html_writer::empty_tag('input',array(
+            'name'=>'aid',
+            'type'=>'hidden',
+            'value'=>'',
+            'id'=>'button-id'
+        ));
+        $modal_body .= html_writer::div($content,'display-none');
+
+        if ($coursework->deadline) {
+            $content_default_deadline = 'Default deadline: ' . userdate($coursework->deadline);
+            $content_default_deadline = html_writer::div($content_default_deadline,'col-md-12', array('id'=>'extension-time-content'));
+            $modal_body .= html_writer::div($content_default_deadline,'form-group row fitem');
+
+            $content_extended_deadline = html_writer::tag('label',get_string('extended_deadline', 'mod_coursework'));
+            $content_extended_deadline_div = html_writer::div($content_extended_deadline,'col-md-3');
+            $input = '<input type="text" class="form-control" id="extension-extend-deadline" placeholder="" disabled readonly>';
+            $content_extended_deadline_div .= html_writer::div($input,'col-md-6');
+            $modal_body .= html_writer::div($content_extended_deadline_div,'form-group row fitem');
+
+            $extension_reasons = coursework::extension_reasons();
+            if (!empty($extension_reasons)) {
+                $select_extension_reasons = html_writer::tag('label',get_string('extension_reason', 'mod_coursework'));
+                $select_extension_reasons_div = html_writer::div($select_extension_reasons,'col-md-3');
+                $select_extension_reasons = html_writer::select($extension_reasons,'','',false, array(
+                    'id' => 'extension-reason-select',
+                    'class' => 'form-control'
+                ));
+                $select_extension_reasons_div .= html_writer::div($select_extension_reasons,'col-md-9 form-inline felement', array('data-fieldtype'=>'select'));
+                $modal_body .= html_writer::div($select_extension_reasons_div,'form-group row fitem');
+            }
+
+            $content_extra_information = html_writer::tag('label',get_string('extra_information', 'mod_coursework'), array(
+                'class'=>'col-form-label d-inline', 'for'=>'id_extra_information'
+            ));
+            $content_extra_information_div = html_writer::div($content_extra_information,'col-md-3');
+            $content_extra_information = html_writer::tag('textarea', '', array(
+                'class' => 'form-control',
+                'rows' => '8',
+                'spellcheck' => 'true',
+                'id' => 'id_extra_information'
+            ));
+            $content_extra_information_div .= html_writer::div($content_extra_information,'col-md-9 form-inline felement', array('data-fieldtype'=>'editor'));
+            $modal_body .= html_writer::div($content_extra_information_div,'form-group row fitem', array('id' => 'fitem_id_extra_information'));
+        }
+
+        $modal_body .= html_writer::end_tag('form');
+
+        $modal_footer = html_writer::empty_tag('img', array(
+            'src'=>  $CFG->wwwroot . '/mod/coursework/pix/loadding.gif',
+            'alt'=>'Load...',
+            'width'=>'25',
+            'class'=>'loading_moderation icon',
+            'style'=>'visibility: hidden;'
+        ));
+        $modal_footer .= html_writer::tag('button', 'Save', array(
+            'type'=>'button',
+            'class'=>'btn btn-primary',
+            'id'=>'extension-submit'
+        ));
+        $modal_footer .= html_writer::tag('button', 'Close', array(
+            'type'=>'button',
+            'class'=>'btn btn-secondary btn-extension-close',
+            'data-dismiss'=>'modal'
+        ));
+        $modal_footer .= html_writer::tag('button', 'Back', array(
+            'type'=>'button',
+            'class'=>'btn btn-secondary',
+            'id'=>'extension-back'
+        ));
+        $modal_footer .= html_writer::tag('button', 'Next', array(
+            'type'=>'button',
+            'class'=>'btn btn-secondary',
+            'id'=>'extension-next'
+        ));
+
+        $html = html_writer::div($modal_header, 'modal-header');
+        $html .= html_writer::div($modal_body, 'modal-body');
+        $html .= html_writer::div($modal_footer, 'modal-footer');
+        $html = html_writer::div($html, 'modal-content');
+        $html = html_writer::div($html, 'modal-dialog modal-lg vertical-align-center', array('role' => 'document'));
+        $html = html_writer::div($html, 'vertical-alignment-helper');
+        $html = html_writer::div($html, 'modal fade', array(
+            'id' => 'modal-ajax',
+            'tabindex' => '-1',
+            'role' => 'dialog',
+            'aria-labelledby' => 'modelTitleId',
+            'aria-hidden' => 'true'
+        ));
+        $html .= html_writer::empty_tag('input',array(
+            'name'=>'',
+            'type'=>'hidden',
+            'data-lang'=>json_encode($lang_messages),
+            'id'=>'datatables_lang_messages'
+        ));
+        $html = html_writer::div($html);
+
+        return $html;
+    }
+
+    public function render_modal() {
+        $result = $this->render_advance_plugins_form();
+        $result .= $this->modal_grading_render();
+        return $result;
+    }
+
+    protected function render_advance_plugins_form() {
+        $form = new \mod_coursework\forms\advance_plugins_form();
+        $result = '<div class="hide">' . $form->render() . '</div>';
+        return $result;
+    }
+
+    /**
+     * @return string
+     */
+    public function modal_grading_render()
+    {
+        $this->page->requires->string_for_js('insertcomment', 'gradingform_guide');
+        $html = '<div class="modal fade" tabindex="-1" role="dialog" id="modal-grading">
+                  <div class="modal-dialog modal-lg modal-grading" role="document">
+                    <div class="modal-content">
+                      <div class="modal-header">
+                        <button type="button" class="close" data-dismiss="modal" aria-label="Close"><span aria-hidden="true">&times;</span></button>
+                      </div>
+                                            <div class="hide">
+                        <input id="cell_selector" type="hidden" />
+                        <input id="cell_type" type="hidden" />
+                      </div>
+                      <div class="modal-body">
+                        <i class="fa fa-spin fa-spinner"></i> loading
+                      </div>
+                      
+                       </div><!-- /.modal-content -->
+                  </div><!-- /.modal-dialog -->
+                </div><!-- /.modal -->
+         <style>.modal table.feedback {table-layout: fixed;} .modal .gradingform_rubric, .modal #guide-advancedgrading {width: 100%; overflow-x: scroll} .modal .form-inline>div {width: 100%}</style>';
+        return $html;
+    }
+
 
 }

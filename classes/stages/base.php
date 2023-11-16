@@ -42,6 +42,13 @@ abstract class base {
      */
     protected $allocatables_with_moderation;
 
+    /**
+     * @var array
+     */
+    private static $self_cache = [
+        'user_is_assessor' => []
+    ];
+
 
     /**
      * @param coursework $coursework
@@ -51,6 +58,7 @@ abstract class base {
         $this->coursework = $coursework;
         $this->stage_identifier = $stage_identifier;
     }
+
 
     /**
      * @return strategy_base
@@ -96,17 +104,14 @@ abstract class base {
      * @return bool
      */
     private function already_allocated($allocatable) {
-
-        global $DB;
-
-        $params = array(
-            'stage_identifier' => $this->identifier(),
-            'allocatableid' => $allocatable->id(),
-            'allocatabletype' => $allocatable->type(),
-            'courseworkid' => $this->get_coursework_id(),
+        $coursework_id = $this->get_coursework_id();
+        allocation::fill_pool_coursework($coursework_id);
+        $record = allocation::get_object(
+            $coursework_id,
+            'allocatableid-allocatabletype-stage_identifier',
+            [$allocatable->id(), $allocatable->type(), $this->identifier()]
         );
-        return $DB->record_exists('coursework_allocation_pairs', $params);
-
+        return !empty($record);
     }
 
     /**
@@ -116,17 +121,16 @@ abstract class base {
      */
     public function assessor_already_allocated_for_this_submission($allocatable, $assessor) {
 
-        global $DB;
-
         if(!empty($assessor)) {
-            $params = array(
-                'assessorid' => $assessor->id,
-                'allocatableid' => $allocatable->id(),
-                'allocatabletype' => $allocatable->type(),
-                'courseworkid' => $this->get_coursework_id(),
+            $coursework_id = $this->get_coursework_id();
+            allocation::fill_pool_coursework($coursework_id);
+            $record = allocation::get_object(
+                $coursework_id,
+                'allocatableid-allocatabletype-assessorid',
+                [$allocatable->id(), $allocatable->type(), $assessor->id]
             );
-            return $DB->record_exists('coursework_allocation_pairs', $params);
-         } else {
+            return !empty($record);
+        } else {
             return false;
         }
     }
@@ -163,6 +167,8 @@ abstract class base {
         $allocation = $this->prepare_allocation_to_save($allocatable, $teacher);
         $allocation->manual = 1;
         $allocation->save();
+
+        allocation::fill_pool_coursework($this->get_coursework()->id());
         return $allocation;
     }
 
@@ -252,14 +258,18 @@ abstract class base {
      * @return bool
      */
     public function allocation_is_manual($allocatable) {
-        $params = array(
-            'courseworkid' => $this->coursework->id,
-            'allocatableid' => $allocatable->id(),
-            'allocatabletype' => $allocatable->type(),
-            'manual' => 1,
-            'stage_identifier' => $this->identifier(),
+
+        $coursework_id = $this->get_coursework_id();
+        allocation::fill_pool_coursework($coursework_id);
+        $record = allocation::get_object(
+            $coursework_id,
+            'allocatableid-allocatabletype-stage_identifier',
+            [$allocatable->id(), $allocatable->type(), $this->identifier()]
         );
-        return allocation::exists($params);
+        if ($record && $record->manual == 1) {
+            return true;
+        }
+        return false;
     }
 
     /**
@@ -300,21 +310,15 @@ abstract class base {
      * @return bool
      */
     public function has_feedback($allocatable) {
-        global $DB;
-
-        if (!isset($this->allocatables_with_feedback)) {
-            $sql = "SELECT allocatableid
-                      FROM {coursework_submissions} s
-                INNER JOIN {coursework_feedbacks} f
-                        ON f.submissionid = s.id
-                     WHERE s.courseworkid = ?
-                       AND f.stage_identifier = ?
-                    ";
-            $allocatables = $DB->get_records_sql($sql, array($this->get_coursework()->id, $this->stage_identifier));
-            $this->allocatables_with_feedback = array_keys($allocatables);
+        $feedback = null;
+        $coursework_id = $this->get_coursework_id();
+        submission::fill_pool_coursework($coursework_id);
+        $submission = submission::get_object($coursework_id, 'allocatableid', [$allocatable->id]);
+        if ($submission) {
+            feedback::fill_pool_coursework($coursework_id);
+            $feedback = feedback::get_object($coursework_id, 'submissionid-stage_identifier', [$submission->id, $this->identifier()]);
         }
-
-       return in_array($allocatable->id, $this->allocatables_with_feedback);
+        return !empty($feedback);
     }
 
     /**
@@ -356,12 +360,8 @@ abstract class base {
      * @return bool|feedback
      */
     public function get_feedback_for_allocatable($allocatable) {
-        $submission_params = array(
-            'courseworkid' => $this->get_coursework()->id,
-            'allocatableid' => $allocatable->id(),
-            'allocatabletype' => $allocatable->type(),
-        );
-        $submission = submission::find($submission_params);
+        $params = [$allocatable->id(), $allocatable->type()];
+        $submission = submission::get_object($this->get_coursework()->id, 'allocatableid-allocatabletype', $params);
 
         if ($submission) {
             return $this->get_feedback_for_submission($submission);
@@ -374,9 +374,10 @@ abstract class base {
      * @return feedback|bool
      */
     public function get_single_feedback($submission){
-        $feedback_params = array('submissionid' => $submission->id, 'stage_identifier'=> 'assessor_1');
+        feedback::fill_pool_coursework($submission->courseworkid);
+        $result = feedback::get_object($submission->courseworkid, 'submissionid-stage_identifier', [$submission->id, 'assessor_1']);
 
-       return feedback::find($feedback_params);
+        return $result;
     }
 
     /**
@@ -384,16 +385,12 @@ abstract class base {
      * @return bool
      */
     public function has_allocation($allocatable) {
-        global $DB;
-
         if (!isset($this->allocatables_with_allocations)) {
-            $sql = "SELECT allocatableid
-                      FROM {coursework_allocation_pairs} a
-                     WHERE a.courseworkid = ?
-                       AND a.stage_identifier = ?
-                    ";
-            $allocatables = $DB->get_records_sql($sql, array($this->get_coursework()->id, $this->stage_identifier));
-            $this->allocatables_with_allocations = array_keys($allocatables);
+            $coursework_id = $this->get_coursework()->id;
+            if (!isset(allocation::$pool[$coursework_id]['stage_identifier'])) {
+                allocation::fill_pool_coursework($coursework_id);
+            }
+            $this->allocatables_with_allocations = array_column(allocation::$pool[$coursework_id]['stage_identifier'][$this->stage_identifier] ?? [], 'allocatableid');
         }
 
         return in_array($allocatable->id, $this->allocatables_with_allocations);
@@ -406,15 +403,11 @@ abstract class base {
      * @return bool
      */
     public function stage_has_allocation(){
-        global $DB;
+        $coursework_id = $this->get_coursework_id();
+        allocation::fill_pool_coursework($coursework_id);
+        $record = allocation::get_object($coursework_id, 'stage_identifier', [$this->stage_identifier]);
 
-        $sql = "SELECT allocatableid
-                      FROM {coursework_allocation_pairs} a
-                     WHERE a.courseworkid = :courseworkid
-                       AND a.stage_identifier = :stageidentifier
-                    ";
-        return  $DB->record_exists_sql($sql, array('courseworkid' => $this->coursework->id(),
-                                                   'stageidentifier' => $this->stage_identifier));
+        return !empty($record);
     }
 
 
@@ -431,13 +424,10 @@ abstract class base {
      * @return allocation|bool
      */
     public function get_allocation($allocatable) {
-        $params = array(
-            'courseworkid' => $this->coursework->id,
-            'stage_identifier' => $this->identifier(),
-            'allocatableid' => $allocatable->id(),
-            'allocatabletype' => $allocatable->type(),
-        );
-        return allocation::find($params);
+        $courseworkid = $this->coursework->id;
+        $params = [$allocatable->id(), $allocatable->type(), $this->identifier()];
+        $allocation = allocation::get_object($courseworkid, 'allocatableid-allocatabletype-stage_identifier', $params);
+        return $allocation;
     }
 
     /**
@@ -445,13 +435,13 @@ abstract class base {
      * @return user
      */
     public function allocated_teacher_for($allocatable) {
-        $params = array(
-            'courseworkid' => $this->coursework->id,
-            'stage_identifier' => $this->identifier(),
-            'allocatableid' => $allocatable->id(),
-            'allocatabletype' => $allocatable->type(),
+        $coursework_id = $this->get_coursework_id();
+        allocation::fill_pool_coursework($coursework_id);
+        $allocation = allocation::get_object(
+            $coursework_id,
+            'allocatableid-allocatabletype-stage_identifier',
+            [$allocatable->id(), $allocatable->type(), $this->identifier()]
         );
-        $allocation = allocation::find($params);
 
         if ($allocation) {
             return $allocation->assessor();
@@ -511,13 +501,12 @@ abstract class base {
             return true;
         }
 
-        $params = array(
-            'courseworkid' => $this->coursework->id,
-            'allocatableid' => $allocatable->id(),
-            'allocatabletype' => $allocatable->type(),
-            'stage_identifier' => $this->stage_identifier
-        );
-        return assessment_set_membership::exists($params);
+        assessment_set_membership::fill_pool_coursework($this->coursework->id);
+        $record = assessment_set_membership::get_object(
+            $this->coursework->id,
+            'allocatableid-allocatabletype-stage_identifier',
+            [$allocatable->id(), $allocatable->type(), $this->stage_identifier]);
+        return !empty($record);
     }
 
     /**
@@ -560,8 +549,12 @@ abstract class base {
      * @return bool
      */
     public function user_is_assessor($assessor) {
-        $enrolled = is_enrolled($this->coursework->get_course_context(), $assessor, $this->assessor_capability());
-        return $enrolled || is_primary_admin($assessor->id);
+        if (!isset(self::$self_cache['user_is_assessor'][$this->coursework->id][$assessor->id])) {
+            $enrolled = is_enrolled($this->coursework->get_course_context(), $assessor, $this->assessor_capability());
+            $res =  $enrolled || is_primary_admin($assessor->id);
+            self::$self_cache['user_is_assessor'][$this->coursework->id][$assessor->id] = $res;
+        }
+        return self::$self_cache['user_is_assessor'][$this->coursework->id][$assessor->id];
     }
 
     /**
@@ -580,16 +573,16 @@ abstract class base {
      * @return bool
      */
     public function assessor_has_allocation($allocatable){
-        global $DB, $USER;
-        $params = array(
-            'courseworkid' => $this->coursework->id,
-            'assessorid' => $USER->id,
-            'allocatableid' => $allocatable->id(),
-            'allocatabletype' => $allocatable->type(),
-            'stage_identifier'=> $this->stage_identifier
+        global $USER;
+        allocation::fill_pool_coursework($this->coursework->id);
+        $allocation = allocation::get_object(
+            $this->coursework->id,
+            'allocatableid-allocatabletype-stage_identifier',
+            [$allocatable->id(), $allocatable->type(), $this->stage_identifier]
         );
-        return $DB->record_exists('coursework_allocation_pairs', $params);
-}
+        $result = ($allocation && $allocation->assessorid == $USER->id);
+        return $result;
+    }
 
     /**
      * @return bool
@@ -642,17 +635,15 @@ abstract class base {
         $previous_stage_ok = true;
         $current_stage = false;
         $current_stage_ok = true;
+        $coursework_id = $this->get_coursework_id();
+        submission::fill_pool_coursework($coursework_id);
 
         foreach ($all_stages as $stage) {
 
             // if coursework has sampling enabled, each stage must be checked if it uses sampling
             if ($this->get_coursework()->sampling_enabled()) {
-                $submission_params = array(
-                    'courseworkid' => $this->get_coursework()->id,
-                    'allocatableid' => $allocatable->id(),
-                    'allocatabletype' => $allocatable->type(),
-                );
-                $submission = submission::find($submission_params);
+
+                $submission = submission::get_object($coursework_id, 'allocatableid-allocatabletype', [$allocatable->id(), $allocatable->type()]);
 
                 if (count($submission->get_assessor_feedbacks()) >= $submission->max_number_of_feedbacks()
                     && $submission->sampled_feedback_exists()){
@@ -703,11 +694,9 @@ abstract class base {
      * @return feedback|bool
      */
     public function get_feedback_for_submission($submission) {
-        $feedback_params = array(
-            'submissionid' => $submission->id,
-            'stage_identifier' => $this->identifier(),
-        );
-        return feedback::find($feedback_params);
+        $stage_identifier = $this->identifier();
+        $feedback = feedback::get_object($submission->courseworkid, 'submissionid-stage_identifier', [$submission->id, $stage_identifier]);
+        return $feedback;
     }
 
     /**
@@ -910,24 +899,25 @@ abstract class base {
      */
     private function in_editable_period($allocatable) {
 
-        global $CFG;
+        $result = $this->get_coursework()->get_grade_editing_time();
 
         //the feedback is not in the editable period if the editable setting is disabled
         if (empty($this->get_coursework()->get_grade_editing_time()))  return false;
 
-        $submission_params = array(
-            'courseworkid' => $this->get_coursework()->id,
-            'allocatableid' => $allocatable->id(),
-            'allocatabletype' => $allocatable->type(),
-        );
-        $submission = submission::find($submission_params);
+        $coursework_id = $this->get_coursework_id();
+        submission::fill_pool_coursework($coursework_id);
+        $submission = submission::get_object($coursework_id, 'allocatableid-allocatabletype', [$allocatable->id(), $allocatable->type()]);
 
         $feedback   =   $this->get_feedback_for_submission($submission);
+        if ($feedback) {
+            $result += $feedback->timecreated;
+        }
 
 
-        return $feedback->timecreated + $this->get_coursework()->get_grade_editing_time() > time();
+        return $result > time();
 
     }
+
 
     private function selected_allocation_in_session($dropdownname)     {
         global  $SESSION;
@@ -948,32 +938,31 @@ abstract class base {
 
     }
 
-	public function get_assessor_from_moodle_course_group($allocatable){
+    public function get_assessor_from_moodle_course_group($allocatable){
 
-		$assessor = '';
-		// get allocatables group
-		if ($this->coursework->is_configured_to_have_group_submissions()){
-			$groupid = $allocatable->id;
-		} else {
-			$user = user::find($allocatable->id);
-			$group = $this->coursework->get_student_group($user);
-			$groupid = ($group)? $group->id: 0;
-		}
+        $assessor = '';
+        // get allocatables group
+        if ($this->coursework->is_configured_to_have_group_submissions()){
+            $groupid = $allocatable->id;
+        } else {
+            $user = user::get_object($allocatable->id);
+            $group = $this->coursework->get_student_group($user);
+            $groupid = ($group)? $group->id: 0;
+        }
 
-		if($groupid) {
-			// find 1st assessor in the group
-			$first_group_assessor = get_enrolled_users($this->coursework->get_context(), $this->assessor_capability(),
-				$groupid, 'u.*', 'id ASC', 0, 1);
+        if($groupid) {
+            // find 1st assessor in the group
+            $first_group_assessor = get_enrolled_users($this->coursework->get_context(), $this->assessor_capability(),
+                $groupid, 'u.*', 'id ASC', 0, 1);
 
-			$assessor = array_column($first_group_assessor, 'id');
+            $assessor = array_column($first_group_assessor, 'id');
 
-			if ($assessor) {
-				$assessorid = $assessor[0];
-				$assessor = user::find($assessorid);
-			}
-		}
+            if ($assessor) {
+                $assessorid = $assessor[0];
+                $assessor = user::get_object($assessorid);
+            }
+        }
 
-		return $assessor;
-	}
-
+        return $assessor;
+    }
 }

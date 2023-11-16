@@ -261,4 +261,12 @@ if ($ADMIN->fulltree) {
     $submission_deadline_name = get_string('submissiondeadline', 'coursework');
     $submission_deadline_description = get_string('submission_deadline_enabled_desc', 'coursework');
     $settings->add(new admin_setting_configselect('coursework_submission_deadline', $submission_deadline_name, $submission_deadline_description, '0', $options));
+
+    // Assessor allocations
+    $assessor_allocations_header = new admin_setting_heading('assessor_allocations_header_header', get_string('assessorallocations', 'mod_coursework'), '');
+    $settings->add($assessor_allocations_header);
+
+    $options =  array( 'username' => get_string('username'), 'email' => get_string('email'));
+    $settings->add(new admin_setting_configselect('coursework_allocation_identifier',  get_string('allocationidentifier', 'coursework'), get_string('allocationidentifier_desc', 'coursework'), 'username', $options));
+
 }

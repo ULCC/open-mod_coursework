@@ -515,7 +515,32 @@ M.mod_coursework = {
             })
 
             if (dateselected == true) {
+                $('#selectedtype').val('date');
                 $('#coursework_personal_deadline_form').submit();
+            } else {
+                alert('You must make at least one selection');
+            }
+
+
+        });
+
+        $('#selected_unfinalise').click( function () {
+
+            var unfinaliseselected = false;
+
+            $('.date_select').each(function (n, element) {
+
+                if ($(element).is(":checked")) {
+                    unfinaliseselected = true;
+                }
+
+            })
+
+            if (unfinaliseselected == true) {
+                $('#selectedtype').val('unfinalise');
+
+
+              $('#coursework_personal_deadline_form').submit();
             } else {
                 alert('You must make at least one selection');
             }

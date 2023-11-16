@@ -69,7 +69,7 @@ class assessorgrade_cell extends cell_base{
      */
     public function get_header($stage){
 
-        if ($this->coursework->is_using_rubric()) {
+        if ($this->coursework->is_using_rubric() ) {
             $strings = array();
             $criterias = $this->coursework->get_rubric_criteria();
             foreach ($criterias as $criteria) { // rubrics can have multiple parts, so let's create header for each of it

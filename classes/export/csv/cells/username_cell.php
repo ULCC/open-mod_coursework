@@ -1,6 +1,7 @@
 <?php
 
 namespace mod_coursework\export\csv\cells;
+use mod_coursework\models\submission;
 
 /**
  * Class username_cell
@@ -8,7 +9,7 @@ namespace mod_coursework\export\csv\cells;
 class username_cell extends cell_base {
 
     /**
-     * @param $submission
+     * @param submission $submission
      * @param $student
      * @param $stage_identifier
      * @return string
@@ -16,7 +17,7 @@ class username_cell extends cell_base {
      */
     public function get_cell($submission, $student, $stage_identifier){
 
-        if ($this->can_view_hidden()){
+        if ($this->can_view_hidden() || $submission->is_published()){
             $username = $student->username;
         } else {
             $username = get_string('hidden', 'coursework');

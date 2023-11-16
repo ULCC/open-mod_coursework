@@ -10,6 +10,7 @@ use mod_coursework\ability;
 use mod_coursework\allocation\allocatable;
 use mod_coursework\grade_judge;
 use mod_coursework\grading_table_row_base;
+use mod_coursework\models\allocation;
 use mod_coursework\models\coursework;
 use mod_coursework\models\feedback;
 use mod_coursework\models\user;
@@ -45,6 +46,12 @@ class single_assessor_feedback_cell extends cell_base {
      * @return string
      */
     public function get_table_cell($rowobject) {
+        $content = $this->get_content($rowobject);
+        return $this->get_new_cell_with_class($content);
+    }
+    
+    public function get_content($rowobject) {
+
         global $USER;
 
         // Single:
@@ -53,6 +60,8 @@ class single_assessor_feedback_cell extends cell_base {
         $ability = new ability(user::find($USER), $rowobject->get_coursework());
 
         $content = '';
+        $submission = $rowobject->get_submission();
+        $allocatable = $rowobject->get_allocatable();
 
         // Add new feedback
         if ($rowobject->has_submission() &&
@@ -106,7 +115,7 @@ class single_assessor_feedback_cell extends cell_base {
 
         }
 
-        return $this->get_new_cell_with_class($content);
+        return $content;
     }
 
     /**
@@ -154,7 +163,7 @@ class single_assessor_feedback_cell extends cell_base {
         return  $OUTPUT->action_icon($link,
                                      $icon,
                                      null,
-                                     array('id' => $link_id));
+                                     array('id' => $link_id, 'class' => 'edit_final_feedback'));
 
     }
 
@@ -195,7 +204,7 @@ class single_assessor_feedback_cell extends cell_base {
             'assessor' => $assessor,
             'stage' => $this->stage,
         );
-        $link = $this->get_router()->get_path('new final feedback', $feedback_params);
+        $link = $this->get_router()->get_path('ajax new final feedback', $feedback_params);
 
         $link_id = 'new_final_feedback_' . $rowobject->get_coursework()
                 ->get_allocatable_identifier_hash($rowobject->get_allocatable());

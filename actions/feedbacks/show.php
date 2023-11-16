@@ -26,9 +26,12 @@ require_once(dirname(__FILE__) . '/../../../../config.php');
 global $CFG, $USER;
 
 $feedbackid = optional_param('feedbackid', 0, PARAM_INT);
+$ajax = optional_param('ajax', 0, PARAM_INT);
 
 $params = array(
     'feedbackid' => $feedbackid,
+    'ajax' => $ajax
+
 );
 $controller = new mod_coursework\controllers\feedback_controller($params);
 $controller->show_feedback();

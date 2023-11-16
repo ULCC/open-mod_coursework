@@ -77,4 +77,23 @@ class mod_coursework_observer {
     public static function process_allocations_when_group_member_removed(\core\event\group_member_removed $event){
         course_group_member_removed($event);
     }
+
+    /**
+     * @param \core\event\role_assigned $event
+     */
+    public static function add_teacher_to_dropdown_when_enrolled(core\event\role_assigned$event){
+        teacher_allocation_cache_purge($event);
+
+    }
+
+    /**
+     * @param \core\event\role_unassigned $event
+     */
+    public static function remove_teacher_from_dropdown_when_unenrolled(core\event\role_unassigned$event){
+        teacher_removed_allocated_not_graded($event);
+        teacher_allocation_cache_purge($event);
+
+    }
+
+
 }

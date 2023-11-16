@@ -62,7 +62,10 @@ class cron {
              * @var coursework $coursework
              */
             $coursework = coursework::find($raw_coursework);
-           
+            if (!$coursework || !$coursework->is_coursework_visible()) {// check if coursework exists and is not hidden
+                continue;
+            }
+
             // if cw doesn't have personal deadlines and deadline passed and cw doesnt have any individual extensions
             if (!$coursework->personal_deadlines_enabled() && (!$coursework->has_deadline()
                 || $coursework->deadline_has_passed() && !$coursework->extension_exists())) {
@@ -335,7 +338,7 @@ class cron {
             // done. Would not want them to check straight away and then find they could still
             // edit it.
             $submission->update_attribute('finalised', 1);
-
+            submission::remove_cache($submission->courseworkid);
             // Slightly wasteful to keep re-fetching the coursework :-/
             $mailer = new mailer($submission->get_coursework());
             foreach ($submission->get_students() as $student) {

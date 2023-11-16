@@ -37,10 +37,7 @@ if (! $course = $DB->get_record('course', array('id' => $id))) {
 require_course_login($course);
 
 if ((float)substr($CFG->release, 0, 5) > 2.6) { // 2.8 > 2.6
-    $event = \mod_coursework\event\course_module_instance_list_viewed::create(array(
-                                                                    'objectid' => $coursework->id,
-                                                                    'context' => $coursework->get_context(),
-                                                                ));
+    $event = \mod_coursework\event\course_module_instance_list_viewed::create(array('context' => context_course::instance($course->id)));
     $event->trigger();
 } else {
     add_to_log($course->id,
@@ -56,7 +53,7 @@ if ((float)substr($CFG->release, 0, 5) > 2.6) { // 2.8 > 2.6
 $PAGE->set_url('/mod/coursework/view.php', array('id' => $id));
 $PAGE->set_title($course->fullname);
 $PAGE->set_heading($course->shortname);
-
+$PAGE->set_pagelayout('incourse');
 echo $OUTPUT->header();
 
 // Get all the appropriate data.
@@ -68,51 +65,8 @@ if (! $courseworks = get_all_instances_in_course('coursework', $course)) {
     die();
 }
 
-// Print the list of instances (your module will probably extend this).
-
-$timenow  = time();
-$strname  = get_string('name');
-$strweek  = get_string('week');
-$strtopic = get_string('topic');
-
-$table = new html_table();
-
-if ($course->format == 'weeks') {
-    $table->head  = array ($strweek, $strname);
-    $table->align = array ('center', 'left');
-} else if ($course->format == 'topics') {
-    $table->head  = array ($strtopic, $strname);
-    $table->align = array ('center', 'left', 'left', 'left');
-} else {
-    $table->head  = array ($strname);
-    $table->align = array ('left', 'left', 'left');
-}
-
-foreach ($courseworks as $coursework) {
-    $name = format_string($coursework->name);
-    if (!$coursework->visible) {
-        // Show dimmed if the mod is hidden.
-        $url = $CFG->wwwroot.'/mod/coursework/view.php';
-        $link = "<a class=\"dimmed\" href=\"{$url}?id={$coursework->coursemodule}\">{$name}</a>";
-    } else {
-        // Show normal if the mod is visible.
-        $link = '<a href="view.php?id='.$coursework->coursemodule.'">'.$name.'</a>';
-    }
-
-    if ($course->format == 'weeks' or $course->format == 'topics') {
-        $table->data[] = array ($coursework->section, $link);
-    } else {
-        $table->data[] = array ($link);
-    }
-}
 
 echo $OUTPUT->heading(get_string('modulenameplural', 'coursework'), 2);
-$OUTPUT->box_start();
-echo html_writer::table($table);
-$OUTPUT->box_end();
-
-// Finish the page.
-
+$page_renderer = $PAGE->get_renderer('mod_coursework', 'page');
+echo $page_renderer->view_course_index($course->id);
 echo $OUTPUT->footer();
-
-

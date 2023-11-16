@@ -57,9 +57,12 @@ abstract class table_base {
      * Makes a new instance. Can be overridden to provide a factory
      *
      * @param \stdClass|int|array $db_record
-     * @return static
+     * @param bool $reload
+     * @return bool
+     * @throws \coding_exception
+     * @throws \dml_exception
      */
-    public static function find($db_record) {
+    public static function find($db_record, $reload = true) {
 
         global $DB;
 
@@ -91,7 +94,9 @@ abstract class table_base {
 
         if ($db_record) {
             $record = new $klass($db_record);
-            $record->reload();
+            if ($reload) {
+                $record->reload();
+            }
             return $record;
         }
 
@@ -610,4 +615,47 @@ abstract class table_base {
         }
         return $this->id;
     }
+
+    /**
+     * cache array
+     *
+     * @var
+     */
+    public static $pool;
+
+    /**
+     *
+     * @param $coursework_id
+     * @throws \dml_exception
+     */
+    public static function fill_pool_coursework($coursework_id) {
+        if (isset(static::$pool[$coursework_id])) {
+            return;
+        }
+        $key = static::$table_name;
+        $cache = \cache::make('mod_coursework', 'courseworkdata', ['id' => $coursework_id]);
+
+        $data = $cache->get($key);
+        if ($data === false) {
+            // no cache found
+            $data = static::get_cache_array($coursework_id);
+            $cache->set($key, $data);
+        }
+
+        static::$pool[$coursework_id] = $data;
+    }
+
+    /**
+     * @param $coursework_id
+     */
+    public static function remove_cache($coursework_id) {
+        global $SESSION;
+        if (!empty($SESSION->keep_cache_data)) {
+            return;
+        }
+        static::$pool[$coursework_id] = null;
+        $cache = \cache::make('mod_coursework', 'courseworkdata', ['id' => $coursework_id]);
+        $cache->delete(static::$table_name);
+    }
+
 }

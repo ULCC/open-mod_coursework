@@ -37,39 +37,42 @@ class mailer {
 
         $submission = $this->coursework->get_user_submission($user);
 
-        $email_data = new \stdClass();
-        $email_data->name = $user->name();
-        $dateformat = '%a, %d %b %Y, %H:%M';
-        $email_data->submittedtime = userdate($submission->time_submitted(), $dateformat);
-        $email_data->coursework_name = $this->coursework->name;
-        $email_data->submissionid = $submission->id;
-        if ($finalised) {
-            $email_data->finalised = get_string('save_email_finalised', 'coursework');
-        } else {
-            $email_data->finalised = '';
+        if ($this->coursework && $this->coursework->is_coursework_visible()) {// check if coursework exists and is not hidden
+
+            $email_data = new \stdClass();
+            $email_data->name = $user->name();
+            $dateformat = '%a, %d %b %Y, %H:%M';
+            $email_data->submittedtime = userdate($submission->time_submitted(), $dateformat);
+            $email_data->coursework_name = $this->coursework->name;
+            $email_data->submissionid = $submission->id;
+            if ($finalised) {
+                $email_data->finalised = get_string('save_email_finalised', 'coursework');
+            } else {
+                $email_data->finalised = '';
+            }
+
+            $subject = get_string('save_email_subject', 'coursework');
+            $text_body = get_string('save_email_text', 'coursework', $email_data);
+            $html_body = get_string('save_email_html', 'coursework', $email_data);
+
+            // New approach.
+            $eventdata = new \core\message\message();
+            $eventdata->component = 'mod_coursework';
+            $eventdata->name = 'submission_receipt';
+            $eventdata->userfrom = \core_user::get_noreply_user();
+            $eventdata->userto = $user->get_raw_record();
+            $eventdata->subject = $subject;
+            $eventdata->fullmessage = $text_body;
+            $eventdata->fullmessageformat = FORMAT_PLAIN;
+            $eventdata->fullmessagehtml = $html_body;
+            $eventdata->smallmessage = $text_body;
+            $eventdata->notification = 1;
+            $eventdata->contexturl = $CFG->wwwroot . '/mod/coursework/view.php?id=' . $submission->get_coursework()->get_coursemodule_id();
+            $eventdata->contexturlname = 'View your submission here';
+            $eventdata->courseid = $this->coursework->course;
+
+            message_send($eventdata);
         }
-
-        $subject = get_string('save_email_subject', 'coursework');
-        $text_body = get_string('save_email_text', 'coursework', $email_data);
-        $html_body = get_string('save_email_html', 'coursework', $email_data);
-
-        // New approach.
-        $eventdata = new \core\message\message();
-        $eventdata->component = 'mod_coursework';
-        $eventdata->name = 'submission_receipt';
-        $eventdata->userfrom =  \core_user::get_noreply_user();
-        $eventdata->userto = $user->get_raw_record();
-        $eventdata->subject = $subject;
-        $eventdata->fullmessage = $text_body;
-        $eventdata->fullmessageformat = FORMAT_PLAIN;
-        $eventdata->fullmessagehtml = $html_body;
-        $eventdata->smallmessage = $text_body;
-        $eventdata->notification = 1;
-        $eventdata->contexturl = $CFG->wwwroot.'/mod/coursework/view.php?id='.$submission->get_coursework()->get_coursemodule_id();
-        $eventdata->contexturlname = 'View your submission here';
-        $eventdata->courseid = $this->coursework->course;
-
-        message_send($eventdata);
 
     }
 
@@ -117,37 +120,40 @@ class mailer {
     public function send_feedback_notification($submission) {
         global $CFG;
 
-        $email_data = new \stdClass();
-        $email_data->coursework_name = $this->coursework->name;
+        if ($this->coursework && $this->coursework->is_coursework_visible()) {// check if coursework exists and is not hidden
 
-        $subject = get_string('feedback_released_email_subject', 'coursework');
+            $email_data = new \stdClass();
+            $email_data->coursework_name = $this->coursework->name;
 
-        // get a student or all students from a group
-        $students = $submission->students_for_gradebook();
+            $subject = get_string('feedback_released_email_subject', 'coursework');
 
-        foreach ($students as $student) {
-            $student = \mod_coursework\models\user::find($student);
+            // get a student or all students from a group
+            $students = $submission->students_for_gradebook();
 
-            $email_data->name = $student->name();
-            $text_body = get_string('feedback_released_email_text', 'coursework', $email_data);
-            $html_body = get_string('feedback_released_email_html', 'coursework', $email_data);
+            foreach ($students as $student) {
+                $student = \mod_coursework\models\user::find($student);
 
-            $eventdata =  new \core\message\message();
-            $eventdata->component = 'mod_coursework';
-            $eventdata->name = 'feedback_released';
-            $eventdata->userfrom = \core_user::get_noreply_user();
-            $eventdata->userto = $student->get_raw_record();
-            $eventdata->subject = $subject;
-            $eventdata->fullmessage = $text_body;
-            $eventdata->fullmessageformat = FORMAT_PLAIN;
-            $eventdata->fullmessagehtml = $html_body;
-            $eventdata->smallmessage = $text_body;
-            $eventdata->notification = 1;
-            $eventdata->contexturl = $CFG->wwwroot . '/mod/coursework/view.php?id=' . $submission->get_coursework()->get_coursemodule_id();
-            $eventdata->contexturlname = 'View your submission here';
-            $eventdata->courseid = $this->coursework->course;
+                $email_data->name = $student->name();
+                $text_body = get_string('feedback_released_email_text', 'coursework', $email_data);
+                $html_body = get_string('feedback_released_email_html', 'coursework', $email_data);
 
-            message_send($eventdata);
+                $eventdata = new \core\message\message();
+                $eventdata->component = 'mod_coursework';
+                $eventdata->name = 'feedback_released';
+                $eventdata->userfrom = \core_user::get_noreply_user();
+                $eventdata->userto = $student->get_raw_record();
+                $eventdata->subject = $subject;
+                $eventdata->fullmessage = $text_body;
+                $eventdata->fullmessageformat = FORMAT_PLAIN;
+                $eventdata->fullmessagehtml = $html_body;
+                $eventdata->smallmessage = $text_body;
+                $eventdata->notification = 1;
+                $eventdata->contexturl = $CFG->wwwroot . '/mod/coursework/view.php?id=' . $submission->get_coursework()->get_coursemodule_id();
+                $eventdata->contexturlname = 'View your submission here';
+                $eventdata->courseid = $this->coursework->course;
+
+                message_send($eventdata);
+            }
         }
     }
 
@@ -162,6 +168,9 @@ class mailer {
 
         global $CFG;
 
+        if (!$this->coursework || !$this->coursework->is_coursework_visible()) {// check if coursework exists and is not hidden
+            return false;
+        }
         $email_data = new \stdClass();
         $email_data->coursework_name = $this->coursework->name;
         $email_data->coursework_name_with_link = \html_writer::link($CFG->wwwroot . '/mod/coursework/view.php?id=' . $this->coursework->get_coursemodule_id(), $this->coursework->name);
@@ -210,33 +219,36 @@ class mailer {
 
         global $CFG;
 
-        $email_data = new \stdClass();
-        $email_data->coursework_name = $this->coursework->name;
+        if ($this->coursework && $this->coursework->is_coursework_visible()) {// check if coursework exists and is not hidden
 
-        $subject = get_string('submission_notification_subject', 'coursework',$email_data->coursework_name);
+            $email_data = new \stdClass();
+            $email_data->coursework_name = $this->coursework->name;
 
-        $userstonotify = \mod_coursework\models\user::find($userstonotify);
+            $subject = get_string('submission_notification_subject', 'coursework', $email_data->coursework_name);
 
-        $email_data->name = $userstonotify->name();
-        $text_body = get_string('submission_notification_text', 'coursework', $email_data);
-        $html_body = get_string('submission_notification_html', 'coursework', $email_data);
+            $userstonotify = \mod_coursework\models\user::find($userstonotify);
 
-        $eventdata =  new \core\message\message();
-        $eventdata->component = 'mod_coursework';
-        $eventdata->name = 'coursework_submission';
-        $eventdata->userfrom = \core_user::get_noreply_user();
-        $eventdata->userto = $userstonotify->get_raw_record();
-        $eventdata->subject = $subject;
-        $eventdata->fullmessage = $text_body;
-        $eventdata->fullmessageformat = FORMAT_PLAIN;
-        $eventdata->fullmessagehtml = $html_body;
-        $eventdata->smallmessage = $text_body;
-        $eventdata->notification = 1;
-        $eventdata->contexturl = $CFG->wwwroot . '/mod/coursework/view.php?id=' . $this->coursework->id();
-        $eventdata->contexturlname = 'coursework submission';
-        $eventdata->courseid = $this->coursework->course;
+            $email_data->name = $userstonotify->name();
+            $text_body = get_string('submission_notification_text', 'coursework', $email_data);
+            $html_body = get_string('submission_notification_html', 'coursework', $email_data);
 
-        message_send($eventdata);
+            $eventdata = new \core\message\message();
+            $eventdata->component = 'mod_coursework';
+            $eventdata->name = 'coursework_submission';
+            $eventdata->userfrom = \core_user::get_noreply_user();
+            $eventdata->userto = $userstonotify->get_raw_record();
+            $eventdata->subject = $subject;
+            $eventdata->fullmessage = $text_body;
+            $eventdata->fullmessageformat = FORMAT_PLAIN;
+            $eventdata->fullmessagehtml = $html_body;
+            $eventdata->smallmessage = $text_body;
+            $eventdata->notification = 1;
+            $eventdata->contexturl = $CFG->wwwroot . '/mod/coursework/view.php?id=' . $this->coursework->id();
+            $eventdata->contexturlname = 'coursework submission';
+            $eventdata->courseid = $this->coursework->course;
+
+            message_send($eventdata);
+        }
 
 
     }

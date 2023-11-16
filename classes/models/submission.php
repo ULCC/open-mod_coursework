@@ -50,7 +50,7 @@ class submission extends table_base implements \renderable {
     /**
      * @var string
      */
-    protected static $table_name = 'coursework_submissions';
+    public static $table_name = 'coursework_submissions';
 
     /**
      * @var int
@@ -221,7 +221,7 @@ class submission extends table_base implements \renderable {
             // Get the real first and last name from the user table. We use fullname($this), which needs it,
             // so we can't lazy-load.
             $user = $DB->get_record('user', array('id' => $this->userid));
-            $allnames = get_all_user_name_fields();
+            $allnames = \core_user\fields::get_name_fields();
             foreach ($allnames as $namefield) {
                 $this->$namefield = $user->$namefield;
             }
@@ -286,7 +286,7 @@ class submission extends table_base implements \renderable {
      */
     public function has_disability() {
         global $DB;
-        $user = $DB->get_record('user', array('id' => $this->userid));
+        $user = user::get_object($this->userid);
         return (!empty($user)) ? has_disability($user->username) : false;
     }
 
@@ -428,16 +428,12 @@ class submission extends table_base implements \renderable {
      * @return feedback[] array of raw db records
      */
     public function get_feedbacks() {
-
-        global $DB;
-
         if (!is_array($this->feedbacks)) {
-            $conditions = array('submissionid' => $this->id);
             // Sort here is on ID so that if there's any need to get the first one chronologically, we can use reset().
-            $this->feedbacks = $DB->get_records('coursework_feedbacks', $conditions, 'id');
-            foreach ($this->feedbacks as &$feedback) {
-                $feedback = new feedback($feedback, $this);
-            }
+
+            feedback::fill_pool_coursework($this->courseworkid);
+            $this->feedbacks = isset(feedback::$pool[$this->courseworkid]['submissionid'][$this->id]) ?
+                feedback::$pool[$this->courseworkid]['submissionid'][$this->id] : [];
         }
 
         return $this->feedbacks;
@@ -459,40 +455,18 @@ class submission extends table_base implements \renderable {
      * @return feedback[]
      */
     public function get_assessor_feedbacks() {
-
-        global $DB;
-
         if (!$this->id) {
             // No submission - empty placeholder.
             return array();
         }
 
-        $params = array(
-            'submissionid' => $this->id,
-            'ismoderation' => 0,
-            'isfinalgrade' => 0,
-            'stageidentifier' => 'final_agreed_1'
-        );
-
-
-        $sql = "SELECT * FROM {coursework_feedbacks}
-                WHERE submissionid = :submissionid
-                AND ismoderation = :ismoderation
-                AND isfinalgrade = :isfinalgrade
-                AND stage_identifier <> :stageidentifier
-                ORDER BY stage_identifier";
-
-        $feedbacks = $DB->get_records_sql($sql, $params);
-
-        if (!$feedbacks) {
-            $feedbacks = array(); // In case of loops, we want to avoid returning false.
+        if (!isset(feedback::$pool[$this->courseworkid]['submissionid-stage_identifier_index'])) {
+            feedback::fill_pool_coursework($this->courseworkid);
         }
-
-        foreach ($feedbacks as &$feedback) {
-            $feedback = new feedback($feedback, $this);
-        }
-
-        return $feedbacks;
+        // Get all other feedbacks whose stage_identifier is not "final_agreed_1"
+        // In case of loops, we would like empty array instead of false.
+        $res = feedback::$pool[$this->courseworkid]['submissionid-stage_identifier_index']["$this->id-others"] ?? [];
+        return $res;
     }
 
     /**
@@ -502,26 +476,15 @@ class submission extends table_base implements \renderable {
      * @throws \dml_multiple_records_exception
      */
     public function get_assessor_feedback_by_stage($stage_identifier) {
-
-        global $DB;
-
-        $params = array(
+        $params = [
             'submissionid' => $this->id,
             'ismoderation' => 0,
             'isfinalgrade' => 0,
-            'stageidentifier' => $stage_identifier
-        );
-
-
-        $sql = "SELECT * FROM {coursework_feedbacks}
-                WHERE submissionid = :submissionid
-                AND ismoderation = :ismoderation
-                AND isfinalgrade = :isfinalgrade
-                AND stage_identifier = :stageidentifier";
-
-        $feedback = $DB->get_record_sql($sql, $params);
+            'stage_identifier' => $stage_identifier
+        ];
+        feedback::fill_pool_coursework($this->courseworkid);
+        $feedback = feedback::get_object($this->courseworkid, 'submissionid-ismoderation-isfinalgrade-stage_identifier', $params);
         return $feedback;
-
     }
 
     /**
@@ -532,23 +495,12 @@ class submission extends table_base implements \renderable {
      */
     public function get_assessor_allocation_by_stage($stage_identifier) {
 
-        global $DB;
-
-        $params = array(
-            'courseworkid' => $this->get_coursework()->id,
-            'allocatableid' => $this->get_allocatable()->id(),
-            'allocatabletype' => $this->get_allocatable()->type(),
-            'stageidentifier' => $stage_identifier
-        );
-
-
-        $sql = "SELECT * FROM {coursework_allocation_pairs}
-                WHERE courseworkid = :courseworkid
-                AND allocatableid = :allocatableid
-                AND allocatabletype = :allocatabletype
-                AND stage_identifier = :stageidentifier";
-
-        $allocation = $DB->get_record_sql($sql, $params);
+        $courseworkid = $this->get_coursework()->id;
+        allocation::fill_pool_coursework($courseworkid);
+        $allocation = allocation::get_object(
+            $courseworkid,
+            'allocatableid-allocatabletype-stage_identifier',
+            [$this->get_allocatable()->id(), $this->get_allocatable()->type(), $stage_identifier]);
         return $allocation;
 
     }
@@ -567,26 +519,14 @@ class submission extends table_base implements \renderable {
             return array();
         }
 
-        $params = array(
+        $params = [
             'submissionid' => $this->id,
             'ismoderation' => 0,
             'isfinalgrade' => 0,
-            'stageidentifier' => 'final_agreed_1'
-        );
-
-
-        $sql = "SELECT * FROM {coursework_feedbacks}
-                WHERE submissionid = :submissionid
-                AND ismoderation = :ismoderation
-                AND isfinalgrade = :isfinalgrade
-                AND stage_identifier = :stageidentifier";
-
-        $feedback = $DB->get_record_sql($sql, $params);
-        if ($feedback){
-             $feedback = new feedback($feedback, $this);
-        } else {
-             $feedback = false;
-        }
+            'stage_identifier' => 'final_agreed_1'
+        ];
+        feedback::fill_pool_coursework($this->courseworkid);
+        $feedback = feedback::get_object($this->courseworkid, 'submissionid-ismoderation-isfinalgrade-stage_identifier', $params);
         return $feedback;
     }
 
@@ -741,7 +681,7 @@ class submission extends table_base implements \renderable {
      * @return mixed
      */
     public function get_last_updated_by_user() {
-        return user::find($this->lastupdatedby);
+        return user::get_object($this->lastupdatedby);
     }
 
     /**
@@ -772,7 +712,10 @@ class submission extends table_base implements \renderable {
     public function get_coursework() {
 
         if (empty($this->coursework)) {
-            $this->coursework = coursework::find($this->courseworkid);
+            if (!isset(coursework::$pool['id'][$this->courseworkid])) {
+                coursework::fill_pool_coursework($this->courseworkid);
+            }
+            $this->coursework = coursework::$pool['id'][$this->courseworkid];
             if (!$this->coursework) {
                 throw new \coding_exception('Could not find the coursework for submission id '. $this->id);
             }
@@ -804,12 +747,16 @@ class submission extends table_base implements \renderable {
             $userid = $USER->id;
         }
 
-        $params = array('submissionid' => $this->id,
-                        'assessorid' => $userid,
-                        'isfinalgrade' => 0,
-                        'ismoderation' => 0);
-        return $DB->record_exists('coursework_feedbacks', $params);
-
+        $params = [
+            'submissionid' => $this->id,
+            'assessorid' => $userid
+        ];
+        feedback::fill_pool_coursework($this->courseworkid);
+        $feedback = feedback::get_object($this->courseworkid, 'submissionid-assessorid', $params);
+        if ($feedback && $feedback->isfinalgrade == 0 && $feedback->ismoderation == 0) {
+            return true;
+        }
+        return false;
     }
 
 
@@ -967,6 +914,10 @@ class submission extends table_base implements \renderable {
         return $this->get_state() >= submission::FULLY_GRADED;
     }
 
+    public function is_finalised()  {
+        return $this->get_state() == submission::FINALISED;
+    }
+
 
     /**
      * @return bool
@@ -983,7 +934,7 @@ class submission extends table_base implements \renderable {
          * @var table_base $classname
          */
         $classname = "\\mod_coursework\\models\\".$this->allocatabletype;
-        return $classname::find($this->allocatableid);
+        return $classname::get_object($this->allocatableid);
     }
 
     /**
@@ -1013,7 +964,8 @@ class submission extends table_base implements \renderable {
 
         if ($this->get_coursework()->plagiarism_flagging_enbled()) {
             // check if not stopped by plagiarism flag
-            $plagiarism = plagiarism_flag::find(array('submissionid' => $this->id));
+            plagiarism_flag::fill_pool_coursework($this->courseworkid);
+            $plagiarism = plagiarism_flag::get_object($this->courseworkid, 'submissionid', [$this->id]);
             if ($plagiarism && !$plagiarism->can_release_grades()) {
                 return false;
             }
@@ -1091,7 +1043,7 @@ class submission extends table_base implements \renderable {
      * @return user|false
      */
     public function get_last_submitter() {
-        return user::find($this->lastupdatedby);
+        return user::get_object($this->lastupdatedby);
     }
 
     /**
@@ -1121,7 +1073,9 @@ class submission extends table_base implements \renderable {
                                    $this->id,
                                    $this->coursework->get_file_options());
 
-        $this->rename_files();
+        if (!empty($this->coursework->renamefiles)) {
+            $this->rename_files();
+        }
     }
 
     /**
@@ -1193,7 +1147,7 @@ class submission extends table_base implements \renderable {
 
     public function sampled_feedback_exists(){
         global $DB;
-        return $DB->record_exists('coursework_sample_set_mbrs', array('courseworkid' => $this->coursework->id,
+        return $DB->record_exists('coursework_sample_set_mbrs', array('courseworkid' => $this->courseworkid,
                                                                      'allocatableid' => $this->get_allocatable()->id(),
                                                                      'allocatabletype' => $this->get_allocatable()->type()));
 
@@ -1269,12 +1223,11 @@ class submission extends table_base implements \renderable {
      * @throws \coding_exception
      */
 
-    public function get_submissions_in_sample(){
-        global $DB;
-        return $DB->get_records('coursework_sample_set_mbrs', array('courseworkid' => $this->get_coursework()->id,
-            'allocatableid' => $this->allocatableid,
-            'allocatabletype' => $this->allocatabletype));
-
+    public function get_submissions_in_sample() {
+        assessment_set_membership::fill_pool_coursework($this->courseworkid);
+        $records = isset(assessment_set_membership::$pool[$this->courseworkid]['allocatableid-allocatabletype'][$allocatable->id . '-' . $allocatable->type()]) ?
+            assessment_set_membership::$pool[$this->courseworkid]['allocatableid-allocatabletype'][$allocatable->id . '-' . $allocatable->type()] : [];
+        return $records;
     }
 
 
@@ -1284,14 +1237,14 @@ class submission extends table_base implements \renderable {
      * @throws \coding_exception
      */
 
-    public function get_submissions_in_sample_by_stage($stage_identifier){
-        global $DB;
-        return $DB->get_record('coursework_sample_set_mbrs',
-                                array('courseworkid' => $this->get_coursework()->id,
-                                      'allocatableid' => $this->allocatableid,
-                                      'allocatabletype' => $this->allocatabletype,
-                                      'stage_identifier'=> $stage_identifier));
-
+    public function get_submissions_in_sample_by_stage($stage_identifier) {
+        assessment_set_membership::fill_pool_coursework($this->courseworkid);
+        $record = assessment_set_membership::get_object(
+            $this->courseworkid,
+            'allocatableid-allocatabletype-stage_identifier',
+            [$this->allocatableid, $this->allocatabletype, $stage_identifier]
+        );
+        return $record;
     }
 
 
@@ -1301,12 +1254,10 @@ class submission extends table_base implements \renderable {
      * @return bool
      * @throws \coding_exception
      */
-    public function has_extension(){
-        global $DB;
-        return $DB->record_exists('coursework_extensions', array('courseworkid' => $this->get_coursework()->id,
-                                                                'allocatableid' => $this->get_allocatable()->id(),
-                                                                'allocatabletype'=>  $this->get_allocatable()->type()));
-
+    public function has_extension() {
+        deadline_extension::fill_pool_coursework($this->courseworkid);
+        $extension = deadline_extension::get_object($this->courseworkid, 'allocatableid-allocatabletype', [$this->allocatableid, $this->allocatabletype]);
+        return !empty($extension);
     }
 
     /**
@@ -1315,14 +1266,12 @@ class submission extends table_base implements \renderable {
      * @return mixed
      * @throws \coding_exception
      */
-    public function submission_extension(){
-        global $DB;
-        return $DB->get_record('coursework_extensions', array('courseworkid' => $this->get_coursework()->id,
-                                                              'allocatableid' => $this->get_allocatable()->id(),
-                                                              'allocatabletype'=>  $this->get_allocatable()->type()));
-
+    public function submission_extension() {
+        deadline_extension::fill_pool_coursework($this->courseworkid);
+        $extension = deadline_extension::get_object($this->courseworkid, 'allocatableid-allocatabletype', [$this->allocatableid, $this->allocatabletype]);
+        return $extension;
     }
-    
+
     /**
      * Retrieve details of submission's personal deadline, if not given, use corsework default
      *
@@ -1330,18 +1279,17 @@ class submission extends table_base implements \renderable {
      * @throws \coding_exception
      */
     public function submission_personal_deadline(){
-        global $DB;
-        $personal_deadline = $DB->get_record('coursework_person_deadlines', array('courseworkid' => $this->get_coursework()->id,
-                                                                                  'allocatableid' => $this->get_allocatable()->id(),
-                                                                                  'allocatabletype'=>  $this->get_allocatable()->type()));
+        $allocatableid = $this->get_allocatable()->id();
+        $allocatabletype = $this->get_allocatable()->type();
+        $personal_deadline = personal_deadline::get_object($this->courseworkid, 'allocatableid-allocatabletype', [$allocatableid, $allocatabletype]);
 
         if ($personal_deadline){
-            $personal_deadline = $personal_deadline->personal_deadline;            
+            $personal_deadline = $personal_deadline->personal_deadline;
         } else {
             $personal_deadline = $this->get_coursework()->deadline;
         }
 
-      return  $personal_deadline;
+        return  $personal_deadline;
 
     }
 
@@ -1363,25 +1311,22 @@ class submission extends table_base implements \renderable {
     public function extension_deadline(){
         return $this->submission_extension()->extended_deadline;
     }
-    
+
     /**
      * Has assessor graded in any of the initial stages?
      */
-    public function is_assessor_initial_grader(){
-        global $DB, $USER;
+    public function is_assessor_initial_grader() {
+        global $USER;
 
-
-        $params = array('submissionid' => $this->id,
-                        'assessorid' => $USER->id,
-                        'stage_identifier' => 'final_agreed_1');
-
-        $sql = "SELECT id
-                FROM {coursework_feedbacks}
-                WHERE submissionid = :submissionid
-                AND assessorid = :assessorid
-                AND stage_identifier <> :stage_identifier";
-
-        return $DB->record_exists_sql($sql, $params);
+        feedback::fill_pool_coursework($this->courseworkid);
+        $feedbacks = isset(feedback::$pool[$this->courseworkid]['submissionid-assessorid'][$this->id . '-' . $USER->id]) ?
+            feedback::$pool[$this->courseworkid]['submissionid-assessorid'][$this->id . '-' . $USER->id] : [];
+        foreach ($feedbacks as $feedback) {
+            if ($feedback->stage_identifier != 'final_agreed_1') {
+                return true;
+            }
+        }
+        return false;
     }
 
 
@@ -1394,40 +1339,25 @@ class submission extends table_base implements \renderable {
      */
     public function editable_feedbacks_exist() {
 
-        global $DB;
+        $editablefeedbacks = [];
+        $coursework = $this->get_coursework();
+        if ($coursework->numberofmarkers > 1 && $this->finalised = 1) {
+            $this->get_coursework()->get_grade_editing_time();
+            $gradeeditingtime = $coursework->get_grade_editing_time();
 
-        $this->get_coursework()->get_grade_editing_time();
-        $params = array('submissionid'=>$this->id);
-        $extrasql = "";
-
-
-        if($this->get_coursework()->get_grade_editing_time() != 0){
-            $extrasql = " AND ((   cf.timecreated + c.gradeeditingtime > :time
-                          AND    cf.finalised = 1) OR cf.finalised = 0)";
-            $params['time'] = time();
-        } else{
-            $extrasql = "  AND    cf.finalised = 0";
+            $editablefeedbacks = isset(feedback::$pool[$coursework->id]['submissionid-finalised'][$this->id . '-0']) ?
+                feedback::$pool[$coursework->id]['submissionid-finalised'][$this->id . '-0'] : [];
+            if ($gradeeditingtime != 0) {
+                $time = time();
+                $finalized_feedbacks = isset(feedback::$pool[$coursework->id]['submissionid-finalised'][$this->id . '-1']) ?
+                    feedback::$pool[$coursework->id]['submissionid-finalised'][$this->id . '-1']: [];
+                foreach ($finalized_feedbacks as $feedback) {
+                    if ($feedback->timecreated + $gradeeditingtime > $time) {
+                        $editablefeedbacks[] = $feedback;
+                    }
+                }
+            }
         }
-
-
-        $sql    =   "
-                    SELECT  *
-                    FROM 	{coursework} c,
-					        {coursework_submissions} cs,
-					        {coursework_feedbacks} cf
-			         WHERE 	c.id = cs.courseworkid
-			         AND	cs.id = cf.submissionid
-			         AND	c.numberofmarkers > 1
-			         AND 	cs.finalised = 1			      
-			         AND	cf.stage_identifier NOT LIKE 'final_agreed%'
-			         AND	cs.id = :submissionid
-			 
-			         
-			         $extrasql
-			         
-        ";
-
-        $editablefeedbacks  =   $DB->get_records_sql($sql, $params);
 
         return (empty($editablefeedbacks))  ?   false : $editablefeedbacks;
     }
@@ -1438,44 +1368,25 @@ class submission extends table_base implements \renderable {
      *
      */
     public function editable_final_feedback_exist() {
+        if (!isset($this->editable_final_feedback)) {
+            $this->editable_final_feedback = false;
+            if ($this->finalised == 1) {
 
-        global $DB;
-
-        $this->get_coursework()->get_grade_editing_time();
-        $params = array('submissionid'=>$this->id);
-        $extrasql = "";
-
-
-        if($this->get_coursework()->get_grade_editing_time() != 0){
-            $extrasql = " AND ((   cf.timecreated + c.gradeeditingtime > :time
-                          AND    cf.finalised = 1) OR cf.finalised = 0)";
-            $params['time'] = time();
-        } else {
-            $extrasql = "  AND    cf.finalised = 0";
+                $coursework = $this->get_coursework();
+                $final_feedback = feedback::get_object($coursework->id, 'submissionid-stage_identifier', [$this->id, 'final_agreed_1']);
+                if ($final_feedback) {
+                    $grade_editing_time = $coursework->get_grade_editing_time();
+                    if ($grade_editing_time) {
+                        if ($final_feedback->timecreated + $grade_editing_time > time()) {
+                            $this->editable_final_feedback = true;
+                        }
+                    } elseif ($final_feedback->finalised == 0 && $final_feedback->assessorid <> 0) {
+                        $this->editable_final_feedback = true;
+                    }
+                }
+            }
         }
-        if (($this->get_coursework()->has_multiple_markers() && !$this->get_coursework()->sampling_enabled())
-            || ($this->get_coursework()->sampling_enabled()  && $this->sampled_feedback_exists())){
-            $extrasql .= " AND	cf.stage_identifier LIKE 'final_agreed%'";
-        }
-
-
-        $sql    =   "
-                    SELECT  *
-                    FROM    {coursework} c,	
-                            {coursework_submissions} cs,
-					        {coursework_feedbacks} cf
-			         WHERE  c.id = cs.courseworkid
-			         AND	cs.id = cf.submissionid
-			         AND 	cs.finalised = 1
-			         AND	cs.id = :submissionid
-			      			         
-			         $extrasql
-			         
-        ";
-
-        $editablefinalfeedback  =   $DB->get_record_sql($sql, $params);
-
-        return (empty($editablefinalfeedback))  ?   false : $editablefinalfeedback;
+        return $this->editable_final_feedback;
     }
 
     /**
@@ -1539,13 +1450,8 @@ class submission extends table_base implements \renderable {
      * @return bool
      */
     function has_valid_extension(){
-        global $DB;
-
-        $valid_extension = false;
-        $extension = $DB->get_record('coursework_extensions',
-                                      array('courseworkid' => $this->courseworkid,
-                                            'allocatableid' => $this->allocatableid,
-                                            'allocatabletype' => $this->allocatabletype));
+        deadline_extension::fill_pool_coursework($this->courseworkid);
+        $extension = deadline_extension::get_object($this->courseworkid, 'allocatableid-allocatabletype', [$this->allocatableid, $this->allocatabletype]);
 
         if ($extension) {
             if ($extension->extended_deadline > time()) {
@@ -1554,4 +1460,90 @@ class submission extends table_base implements \renderable {
         }
         return $valid_extension;
     }
+
+
+    function can_be_unfinalised()   {
+        return  ($this->get_state()  == submission::FINALISED);
+    }
+
+    /**
+     * check if the feedback by provided assessor exists
+     *
+     * @param $assessorid
+     * @return bool|false|mixed|stdClass
+     * @throws \dml_exception
+     */
+    function has_specific_assessor_feedback($assessorid){
+        global $DB;
+
+        $feedback = $DB->get_record('coursework_feedbacks', array('submissionid'=>$this->id,
+                                                                        'assessorid'=>$assessorid));
+
+        return (empty($feedback))  ?   false : $feedback;
+    }
+
+    //caching
+
+    /**
+     * cache array
+     *
+     * @var
+     */
+    public static $pool;
+
+    /**
+     *
+     * @param $coursework_id
+     * @return array
+     */
+    protected static function get_cache_array($coursework_id) {
+        global $DB;
+        $records = $DB->get_records(static::$table_name, ['courseworkid' => $coursework_id]);
+        $result = [
+            'id' => [],
+            'allocatableid' => [],
+            'finalised' => [],
+            'allocatableid-allocatabletype' => []
+        ];
+        if ($records) {
+            foreach ($records as $record) {
+                $object = new self($record);
+                $result['id'][$record->id] = $object;
+                $result['allocatableid'][$record->allocatableid][] = $object;
+                $result['finalised'][$record->finalised][] = $object;
+                $result['allocatableid-allocatabletype'][$record->allocatableid . '-' . $record->allocatabletype][] = $object;
+            }
+        }
+        return $result;
+    }
+
+    /**
+     *
+     * @param $coursework_id
+     * @param $key
+     * @param $params
+     * @return bool
+     */
+    public static function get_object($coursework_id, $key, $params) {
+        if (!isset(self::$pool[$coursework_id])) {
+            self::fill_pool_coursework($coursework_id);
+        }
+        $value_key = implode('-', $params);
+        return self::$pool[$coursework_id][$key][$value_key][0] ?? false;
+    }
+
+    /**
+     *
+     */
+    protected function post_save_hook() {
+        self::remove_cache($this->courseworkid);
+    }
+
+    /**
+     *
+     */
+    protected function after_destroy() {
+        self::remove_cache($this->courseworkid);
+    }
+
 }

@@ -81,6 +81,9 @@ if ($data   =   $allocationsuploadform->get_data())   {
     $page_renderer = $PAGE->get_renderer('mod_coursework', 'page');
     echo $page_renderer->process_csv_upload($procsessingresults, $content, $csvtype);
 
+    $cache = \cache::make('mod_coursework', 'courseworkdata', ['id' => $coursework->id]);
+    $cache->purge();
+
 } else {
     $page_renderer = $PAGE->get_renderer('mod_coursework', 'page');
     echo $page_renderer->csv_upload($allocationsuploadform, $csvtype);

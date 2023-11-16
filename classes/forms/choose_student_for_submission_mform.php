@@ -55,7 +55,7 @@ class choose_student_for_submission_mform extends moodleform {
         }
 
         $options = array();
-        $allnames = get_all_user_name_fields();
+        $allnames = \core_user\fields::get_name_fields();
 
         foreach ($students as $student) {
 

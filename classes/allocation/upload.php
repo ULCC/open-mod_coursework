@@ -47,7 +47,9 @@ class upload {
      * @throws \moodle_exception
      */
     public function validate_csv($content,$encoding,$delimeter){
-        global $DB;
+        global $CFG, $DB;
+
+        $assessor_identifier = $CFG->coursework_allocation_identifier;
 
         $iid = \csv_import_reader::get_new_iid('courseworkallocationsdata');
         $csvreader = new \csv_import_reader($iid, 'courseworkallocationsdata');
@@ -102,7 +104,7 @@ class upload {
 
                     if ($allocatabletype == 'user'){
                         // get user id
-                        $suballocatable  = $DB->get_record('user', array('username'=>$value));
+                        $suballocatable  = $DB->get_record('user', array($assessor_identifier=>$value));
                         $allocatable = ($suballocatable)? \mod_coursework\models\user::find($suballocatable->id): '';
                     } else {
                         // get group id
@@ -125,7 +127,7 @@ class upload {
                     // skip empty assessors fields
                     if(empty($value)){ continue;}
 
-                    $assessor =  $DB->get_record('user', array('username'=>$value));
+                    $assessor =  $DB->get_record('user', array($assessor_identifier=>$value));
 
                     if(!$assessor ||!in_array($assessor->id, $assessors)){$errors[$s] = get_string('assessornotincoursework', 'coursework', $keynum ); continue;}
 
@@ -159,7 +161,9 @@ class upload {
      */
     public function process_csv($content, $encoding, $delimiter, $processingresults){
 
-        global $DB, $PAGE;
+        global $CFG, $DB, $PAGE;
+
+        $assessor_identifier = $CFG->coursework_allocation_identifier;
 
         $iid = \csv_import_reader::get_new_iid('courseworkallocationsdata');
         $csvreader = new \csv_import_reader($iid, 'courseworkallocationsdata');
@@ -211,7 +215,7 @@ class upload {
                 if ($cells[$keynum] == 'allocatable')   {
                     if ($allocatabletype == 'user'){
                         // get user id
-                        $suballocatable  = $DB->get_record('user', array('username'=>$value));
+                        $suballocatable  = $DB->get_record('user', array($assessor_identifier=>$value));
                         $allocatable = ($suballocatable)? \mod_coursework\models\user::find($suballocatable->id): '';
                     } else {
                         // get group id
@@ -222,7 +226,7 @@ class upload {
                 }
                 if (substr($cells[$keynum],0,8) == 'assessor' && !(empty($value))){
 
-                    $assessor =  $DB->get_record('user', array('username'=>$value));
+                    $assessor =  $DB->get_record('user', array($assessor_identifier=>$value));
 
                     $params = array('courseworkid' => $this->coursework->id,
                                     'allocatableid' => $allocatable->id,

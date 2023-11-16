@@ -51,6 +51,25 @@ class multi_marker_feedback_sub_rows implements sub_rows_interface {
     }
 
     /**
+     * @param $feedback_row
+     * @param $coursework
+     * @param null $ability
+     * @return string
+     */
+    public function get_grade_cell_content($feedback_row, $coursework, $ability = null) {
+        global $USER;
+
+        if (empty($ability)) {
+            $ability = new ability(user::find($USER), $coursework);
+        }
+        $gradedby = ($coursework->allocation_enabled() && $feedback_row->has_feedback() && $feedback_row->get_graded_by() != $feedback_row->get_assessor())?
+            ' (Graded by: '. $feedback_row->get_graders_name().')' : '';
+        $editable = (!$feedback_row->has_feedback() || $feedback_row->get_feedback()->finalised)? '' : '</br>'.get_string('notfinalised', 'coursework');
+        $result = $this->comment_for_row($feedback_row, $ability) . $gradedby . $editable;
+        return $result;
+    }
+
+    /**
      * Renders the table of feedbacks from assessors, which appears under each student's submission in the
      * grading report of the multiple marker courseworks.
      *
@@ -62,7 +81,7 @@ class multi_marker_feedback_sub_rows implements sub_rows_interface {
         global $USER, $PAGE;
 
         $coursework = $assessor_feedback_table->get_coursework();
-        $ability = new ability(user::find($USER), $coursework);
+        $ability = new ability(user::find($USER, false), $coursework);
         $feedbackrows = $assessor_feedback_table->get_renderable_feedback_rows();
 
 
@@ -95,21 +114,16 @@ class multi_marker_feedback_sub_rows implements sub_rows_interface {
                         <td class = "not_included_in_sample" colspan =3>'.get_string('notincludedinsample','mod_coursework').'</td>
                         </tr >';
             } else {
-                $gradedby = ($coursework->allocation_enabled() && $feedback_row->has_feedback() && $feedback_row->get_graded_by() != $feedback_row->get_assessor())?
-                                    ' (Graded by: '. $feedback_row->get_graders_name().')':'';
 
                 $assessor_details  =   (empty($feedback_row->get_assessor()->id()) && $coursework->allocation_enabled()) ?
                      get_string('assessornotallocated','mod_coursework') : $this->profile_link($feedback_row);
-
-
-
-                $editable = (!$feedback_row->has_feedback() || $feedback_row->get_feedback()->finalised)? '' : '</br>'.get_string('notfinalised', 'coursework');
-                 $output_rows .= '
-              <td>' . $assessor_details. ' </td>
-              <td class="assessor_feedback_grade">' . $this->comment_for_row($feedback_row, $ability) .$gradedby. $editable.'</td >
-              <td >' . $this->date_for_column($feedback_row) . '</td >
-            </tr >
-            ';
+                
+                 $output_rows .=
+                     '<td>' . $assessor_details. ' </td>
+                     <td class="assessor_feedback_grade" data-class-name="' . get_class($this) . '">' .
+                     $this->get_grade_cell_content($feedback_row, $coursework, $ability) .
+                     '</td>
+                     <td >' . $this->date_for_column($feedback_row) . '</td ></tr >';
             }
         }
 
@@ -118,7 +132,7 @@ class multi_marker_feedback_sub_rows implements sub_rows_interface {
             $allocation_string =  ($coursework->allocation_enabled())?
                                    get_string('allocatedtoassessor', 'mod_coursework'):
                                    get_string('assessor', 'mod_coursework');
-
+/*
             $table_html = '
                 <tr class = "submissionrowmultisub">
 
@@ -137,6 +151,19 @@ class multi_marker_feedback_sub_rows implements sub_rows_interface {
                     </table>
                   </td>
                 </tr>';
+*/
+            $table_html = '<table class="assessors" id="assessorfeedbacktable_' . $assessor_feedback_table->get_coursework()
+                        ->get_allocatable_identifier_hash($assessor_feedback_table->get_allocatable()) . '" style="display: none;">
+                        <tr>
+                          <th>' . $allocation_string . '</th>
+                          <th>' . get_string('grade', 'mod_coursework') . '</th>
+                          <th>' . get_string('tableheaddate', 'mod_coursework') . '</th>
+                        </tr>';
+
+                $table_html .= $output_rows;
+
+                $table_html .= '
+                        </table>';
 
             return $table_html;
         } else {
@@ -172,8 +199,8 @@ class multi_marker_feedback_sub_rows implements sub_rows_interface {
         $icon = new pix_icon('edit', $linktitle, 'coursework');
         $link_id = "edit_feedback_" . $feedback_row->get_feedback()->id;
         $link = $this->get_router()
-            ->get_path('edit feedback', array('feedback' => $feedback_row->get_feedback()));
-        $iconlink = $OUTPUT->action_icon($link, $icon, null, array('id' => $link_id));
+            ->get_path('ajax edit feedback', array('feedback' => $feedback_row->get_feedback()));
+        $iconlink = $OUTPUT->action_icon($link, $icon, null, array('id' => $link_id, 'class' => 'edit_feedback'));
         return $iconlink;
     }
 
@@ -230,10 +257,10 @@ class multi_marker_feedback_sub_rows implements sub_rows_interface {
 
         $new_feedback_params = array(
             'submission' => $feedback_row->get_submission(),
-            'assessor' => user::find($USER),
+            'assessor' => user::find($USER, false),
             'stage' => $feedback_row->get_stage()
         );
-        $link = $this->get_router()->get_path('new feedback', $new_feedback_params);
+        $link = $this->get_router()->get_path('ajax new feedback', $new_feedback_params);
         $iconlink = $OUTPUT->action_link($link,
                                          $linktitle,
                                          null,
@@ -245,7 +272,7 @@ class multi_marker_feedback_sub_rows implements sub_rows_interface {
      * @param assessor_feedback_row $feedback_row
      * @return string
      */
-    protected function profile_link($feedback_row) {
+    public function profile_link($feedback_row) {
         global $COURSE;
 
         $assessor = $feedback_row->get_assessor();
@@ -270,7 +297,7 @@ class multi_marker_feedback_sub_rows implements sub_rows_interface {
      * @param assessor_feedback_row $feedback_row
      * @return string
      */
-    protected function date_for_column($feedback_row) {
+    public function date_for_column($feedback_row) {
         if ($feedback_row->has_feedback()) {
             return userdate($feedback_row->get_feedback()->timecreated, '%a, %d %b %Y, %H:%M ');
         }

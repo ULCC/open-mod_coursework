@@ -23,11 +23,6 @@ class user_cell extends cell_base implements allocatable_cell {
 
         $content = '';
 
-        /**
-         * @var user $user
-         */
-        $user = $rowobject->get_allocatable();
-
   /*      if ($rowobject->can_view_username()) {
             $content .= $OUTPUT->user_picture($user->get_raw_record());
         } else {
@@ -39,6 +34,18 @@ class user_cell extends cell_base implements allocatable_cell {
         } */
         // TODO CSS for the space!!
         $content .= ' ' . $rowobject->get_user_name(true);
+        $content .= "<br>".$rowobject->get_email();
+        $user   =   $rowobject->get_allocatable();
+/*
+        $candidatenumber    =   $user->candidate_number();
+
+        if (!empty($candidatenumber))   {
+
+            $content    .=  '<br /> ('.$candidatenumber.')';
+
+        }
+
+*/
 
         return $this->get_new_cell_with_class($content);
     }
@@ -67,17 +74,37 @@ class user_cell extends cell_base implements allocatable_cell {
                                                                $options['sorthow'],
                                                                $options['sortby'],
                                                                 $tablename);
+           $sort_by_email = $this->helper_sortable_heading(get_string('email', 'mod_coursework'),
+               'email',
+               $options['sorthow'],
+               $options['sortby'],
+               $tablename);
+
        } else { // otherwise display header without sorting
            $sort_by_first_name = get_string('firstname');
-           $sort_by_last_name =get_string('lastname');
+           $sort_by_last_name = get_string('lastname');
+           $sort_by_email = get_string('email', 'mod_coursework');
        }
 
         if ($this->fullname_format() == 'lf') {
-            $sort_by_name = $sort_by_last_name . ' / ' . $sort_by_first_name;
+            $sort_by_first_name = ' / ' . $sort_by_first_name;
         } else {
-            $sort_by_name = $sort_by_first_name . ' / ' . $sort_by_last_name;
+            $sort_by_last_name = ' / ' . $sort_by_last_name;
         }
-        return $sort_by_name;
+
+        $sort_by_first_name = '<span class="data-table-splitter splitter-firstname sorting">'.$sort_by_first_name.'</span>';
+
+        $sort_by_last_name = '<span class="data-table-splitter splitter-lastname sorting">'.$sort_by_last_name.'</span>';
+
+        $sort_by_email = '<span class="data-table-splitter splitter-email sorting">'.$sort_by_email.'</span>';
+
+        if ($this->fullname_format() == 'lf') {
+            $sort_by_name = $sort_by_last_name . $sort_by_first_name;
+        } else {
+            $sort_by_name = $sort_by_first_name . $sort_by_last_name;
+        }
+        $sort = $sort_by_name ."<br>" .$sort_by_email;
+        return $sort;
     }
 
     /**

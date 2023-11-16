@@ -33,16 +33,26 @@ class multiple_agreed_grade_cell extends cell_base {
      * @param grading_table_row_base $rowobject
      * @return string
      */
-    public function get_table_cell($rowobject) {
+    public function get_table_cell($rowobject) {        
+        $content = $this->get_content($rowobject);
+        return $this->get_new_cell_with_class($content);
+    }
+
+    /**
+     * @param $rowobject
+     * @return \html_table_cell|string
+     */
+    public function get_content($rowobject) {
+
         global $USER, $OUTPUT;
 
 
         //if coursework uses sampling check if any enabled for this submission, otherwise there is no agreed grade
         if($rowobject->get_coursework()->sampling_enabled() && $rowobject->get_submission() && !$rowobject->get_submission()->sampled_feedback_exists()){
             $content = get_string('singlemarker', 'coursework');
-            return $this->get_new_cell_with_class($content);
+            return $content;
         }
-        $ability = new ability(user::find($USER), $rowobject->get_coursework());
+        $ability = new ability(user::find($USER, false), $rowobject->get_coursework());
 
         $content = '';
 
@@ -66,12 +76,14 @@ class multiple_agreed_grade_cell extends cell_base {
             $feedback_route_params = array(
                 'feedback' => $finalfeedback
             );
-            $link = $this->get_router()->get_path('edit feedback', $feedback_route_params);
+            $link = $this->get_router()->get_path('ajax edit feedback', $feedback_route_params);
 
             $iconlink = $OUTPUT->action_icon($link,
                                              $icon,
                                              null,
-                                             array('id' => 'edit_final_feedback_' . $rowobject->get_coursework()
+                                             array(
+                                                 'class' => 'edit_final_feedback',
+                                                 'id' => 'edit_final_feedback_' . $rowobject->get_coursework()
                                                      ->get_allocatable_identifier_hash($rowobject->get_allocatable())));
 
         } else if ($rowobject->has_submission()) { // New
@@ -92,7 +104,7 @@ class multiple_agreed_grade_cell extends cell_base {
                     'assessor' => $USER,
                     'stage' => $this->stage,
                 );
-                $link = $this->get_router()->get_path('new final feedback', $feedback_route_params);
+                $link = $this->get_router()->get_path('ajax new final feedback', $feedback_route_params);
 
                 $iconlink = $OUTPUT->action_link($link,
                                                  $title,
@@ -129,9 +141,8 @@ class multiple_agreed_grade_cell extends cell_base {
                  $content .= ' by: ' . $finalfeedback->get_assesor_username();
              }
         }
-
-
-        return $this->get_new_cell_with_class($content);
+        
+        return $content;
     }
 
     /**

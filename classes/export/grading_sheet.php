@@ -26,7 +26,7 @@ class grading_sheet extends csv{
 
 
 
-    public function get_submissions(){
+    public function get_submissions($groupid = null, $selected_submission_ids = ''){
         global $PAGE, $USER;
         $params = array(
             'courseworkid' => $this->coursework->id
@@ -157,6 +157,8 @@ class grading_sheet extends csv{
         } else {
             $csv_cells[] = 'name';
             $csv_cells[] = 'username';
+            $csv_cells[] = 'idnumber';
+            $csv_cells[] = 'email';
         }
         $csv_cells[] = 'submissiontime';
 

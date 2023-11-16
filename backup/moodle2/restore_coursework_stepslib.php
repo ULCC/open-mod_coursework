@@ -448,6 +448,7 @@ class restore_coursework_activity_structure_step extends restore_activity_struct
                                   'automaticagreement'=>0,
                                   'automaticagreementrange'=>0,
                                   'automaticagreementstrategy'=>'',
+                                  'averagerounding'=>'mid',
                                   'feedbackreleaseemail'=>0,
                                     'gradeeditingtime'=>0,
                                     'markingdeadlineenabled'=>0,

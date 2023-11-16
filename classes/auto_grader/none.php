@@ -14,7 +14,7 @@ class none implements auto_grader {
      * @param $allocatable
      * @param $percentage
      */
-    public function __construct($coursework, $allocatable, $percentage) {
+    public function __construct($coursework, $allocatable) {
     }
 
     public function create_auto_grade_if_rules_match() {

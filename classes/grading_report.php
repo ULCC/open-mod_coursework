@@ -16,7 +16,12 @@
 
 namespace mod_coursework;
 
+use mod_coursework\models\allocation;
+use mod_coursework\models\course_module;
 use mod_coursework\models\coursework;
+use mod_coursework\models\feedback;
+use mod_coursework\models\module;
+use mod_coursework\models\submission;
 use mod_coursework\models\user;
 use mod_coursework\render_helpers\grading_report\cells\cell_interface;
 use mod_coursework\render_helpers\grading_report\sub_rows\sub_rows_interface;
@@ -27,6 +32,11 @@ defined('MOODLE_INTERNAL') || die();
  * Renderable component containing all the data needed to display the grading report
  */
 class grading_report {
+
+    //added static vars to determine in what manner the report is loaded
+    public static $MODE_GET_ALL = 1;
+    public static $MODE_GET_FIRST_RECORDS = 2;
+    public static $MODE_GET_REMAIN_RECORDS = 3;
 
     /**
      * @var array rendering options
@@ -50,6 +60,11 @@ class grading_report {
     private $totalrows;
 
     /**
+     * @var int The real total number of rows the user could see on all pages.
+     */
+    public $realtotalrows;
+
+    /**
      * @var
      */
     private $sub_rows;
@@ -67,8 +82,27 @@ class grading_report {
      * @param coursework $coursework
      */
     public function __construct(array $options, $coursework) {
+
+        $options['courseworkid']    =   $coursework->id;
+
         $this->options = $options;
         $this->coursework = $coursework;
+        $this->fill_pool();
+    }
+
+    /**
+     * Cache data for later use
+     */
+    protected function fill_pool() {
+        global $DB;
+
+        $coursework_id = $this->coursework->id;
+        submission::fill_pool_coursework($coursework_id);
+        coursework::fill_pool([$this->coursework]);
+        course_module::fill_pool([$this->coursework->get_course_module()]);
+        module::fill_pool($DB->get_records('modules', ['name' => 'coursework']));
+        feedback::fill_pool_submissions($coursework_id, array_keys(submission::$pool[$coursework_id]['id']));
+        allocation::fill_pool_coursework($coursework_id);
     }
 
     /**
@@ -306,7 +340,7 @@ class grading_report {
      *
      * @return grading_table_row_base[] row objects
      */
-    public function get_table_rows_for_page() {
+    public function get_table_rows_for_page($rowcount=false) {
 
         global $USER;
 
@@ -317,70 +351,68 @@ class grading_report {
 
             // Make tablerow objects so we can use the methods to check permissions and set things.
             $rows = array();
-            foreach ($participants as $participant) {
+            $row_class = $this->coursework->has_multiple_markers() ? 'mod_coursework\grading_table_row_multi' : 'mod_coursework\grading_table_row_single';
+            $ability = new ability(user::find($USER, false), $this->get_coursework());
+
+            $participantsfound  =   0;
+
+            foreach ($participants as $key => $participant) {
 
                 // handle 'Group mode' - unset groups/individuals thaat are not in the chosen group
-               if(!empty($options['group']) && $options['group'] != -1){
-                   if ($this->coursework->is_configured_to_have_group_submissions()){
-                       if($options['group'] != $participant->id) continue;
-                   } else {
-                       if(!$this->coursework->student_in_group($participant->id, $options['group']))continue;
-                   }
-               }
-
-                if ($this->coursework->has_multiple_markers()) {
-                    $row = new grading_table_row_multi($this->coursework, $participant);
-                    $rows[$participant->id()] = $row;
-                } else {
-                    $row = new grading_table_row_single($this->coursework, $participant);
-                    $rows[$participant->id()] = $row;
+                if(!empty($options['group']) && $options['group'] != -1){
+                    if ($this->coursework->is_configured_to_have_group_submissions()){
+                        if($options['group'] != $participant->id) continue;
+                    } else {
+                        if(!$this->coursework->student_in_group($participant->id, $options['group']))continue;
+                    }
                 }
+
+                $row = new $row_class($this->coursework, $participant);
+
+                // Now, we skip the ones who should not be visible on this page.
+                $can_show = $ability->can('show', $row);
+                if (!$can_show && !isset($options['unallocated'])) {
+                    unset($participants[$key]);
+                    continue;
+                }
+                if ($can_show && isset($options['unallocated'])) {
+                    unset($participants[$key]);
+                    continue;
+                }
+
+                $rows[$participant->id()] = $row;
+                $participantsfound++;
+                if (!empty($rowcount) && $participantsfound >= $rowcount) break;
+
             }
 
             // Sort the rows.
             $method_name = 'sort_by_' . $options['sortby'];
             if (method_exists($this, $method_name)) {
                 usort($rows,
-                      array($this,
-                            $method_name));
-            }
-
-            $ability = new ability(user::find($USER), $this->get_coursework());
-
-            // Now, we remove the ones who should not be visible on this page. Must happen AFTER the sort!
-            // Rather than sort in SQL, we sort here so we can use complex permissions stuff.
-            // Page starts at 0!
-            $start = ($options['page']) * $options['perpage']; // Will start at 0.
-            $end = ($options['page'] + 1) * $options['perpage']; // Take care of overlap: 0-10, 10-20, 20-30.
-            $counter = 0; // Begin from the first one that the user could see.
-            foreach ($rows as $allocatable_id => $row) {
-                /**
-                 * @var grading_table_row_base $row
-                 */
-                // Some the user should not even know are there. Important that we only increment the counter after
-                // this point.
-                if (!$ability->can('show', $row) && !isset($options['unallocated'])) {
-                    unset($rows[$allocatable_id]);
-                    continue;
-                }
-
-                if ($ability->can('show', $row) && isset($options['unallocated'])) {
-                    unset($rows[$allocatable_id]);
-                    continue;
-                }
-
-                $counter++;
-
-                if ($counter <= $start || $counter > $end) { // Taking care not to include the same ones in two pages.
-                    unset($rows[$allocatable_id]);
-                }
+                    array($this,
+                        $method_name));
             }
 
             // Some will have submissions and therefore data fields. Others will have those fields null.
             /* @var grading_table_row_base[] $tablerows */
 
+            $counter = count($rows);
+            $this->realtotalrows = $counter;
+            $mode = empty($this->options['mode']) ? self::$MODE_GET_ALL : $this->options['mode'];
+            if ($mode != self::$MODE_GET_ALL) {
+                $perpage = $this->options['perpage'] ?? 10;
+                if ($counter > $perpage) {
+                    if ($mode == self::$MODE_GET_FIRST_RECORDS) {
+                        $rows = array_slice($rows, 0, $perpage);
+                    } else if ($mode == self::$MODE_GET_REMAIN_RECORDS) {
+                        $rows = array_slice($rows, $perpage);
+                    }
+                }
+            }
+
             $this->tablerows = $rows;
-            $this->totalrows = $counter;
+            $this->totalrows = count($rows);
         }
 
         return $this->tablerows;
